@@ -1,5 +1,5 @@
 #include <iostream>
-#include <string>
+#include  <string>
 #include <cmath>
 #include <algorithm>
 #include <numeric>
@@ -20,14 +20,19 @@
 #include "geometry_msgs/msg/pose_with_covariance.hpp"
 #include "geometry_msgs/msg/twist_with_covariance.hpp"
 
+
 using namespace std::chrono_literals;
 
-class TrolleyControl : public rclcpp::Node
+class TrolleyControl:public rclcpp::Node
 {
 private:
+
 public:
-    TrolleyControl(/* args */) : Node("ums_fiction_driver_node")
+    TrolleyControl(/* args */):Node("ums_fiction_driver_node")
     {
+        int baudrate = 0;
+        std::string serialPort;
+
         this->declare_parameter<int>("baudrate");
         this->declare_parameter<std::string>("port");
 
@@ -35,47 +40,35 @@ public:
         this->get_parameter<std::string>("port", serialPort);
         this->get_parameter<int>("baudrate", baudrate);
 
-
-
-        RfidPub = this->create_publisher<std_msgs::msg::String>("rfid_ori_data", rclcpp::SensorDataQoS());
+        CarPub = this->create_publisher<std_msgs::msg::String>("car",1);
+        RfidPub = this->create_publisher<std_msgs::msg::String>("rfid_ori_data",1);
         MagnetSensorPub = this->create_publisher<std_msgs::msg::String>("magnet_data", rclcpp::SensorDataQoS());
-        OdomPublisher = this->create_publisher<nav_msgs::msg::Odometry>("odom", rclcpp::SensorDataQoS());
-        TwistSub = this->create_subscription<geometry_msgs::msg::Twist>("cmd_vel", 1, std::bind(&TrolleyControl::VelCallback, this, std::placeholders::_1));
-        IoOut = this->create_subscription<std_msgs::msg::String>("IO", 1, std::bind(&TrolleyControl::IoCallback, this, std::placeholders::_1));
-        MotorPowerControlSub = this->create_subscription<std_msgs::msg::String>("motor_power_control", 1, std::bind(&TrolleyControl::MotorPowerCallback, this, std::placeholders::_1));
-        ImuPublisher = this->create_publisher<sensor_msgs::msg::Imu>("imu", rclcpp::SensorDataQoS());
-        PowerInformation = this->create_publisher<std_msgs::msg::String>("PowerInformationData", rclcpp::SensorDataQoS());
-        Timer = this->create_wall_timer(5ms, std::bind(&TrolleyControl::CarPubCallBack, this));
+        OdomPublisher = this->create_publisher<nav_msgs::msg::Odometry>("odom",1);
+        TwistSub = this->create_subscription<geometry_msgs::msg::Twist>("cmd_vel",1,std::bind(&TrolleyControl::VelCallback,this,std::placeholders::_1));
+        IoOut = this->create_subscription<std_msgs::msg::String>("IO",1,std::bind(&TrolleyControl::IoCallback,this,std::placeholders::_1));
+        MotorPowerControlSub = this->create_subscription<std_msgs::msg::String>("motor_power_control",1,std::bind(&TrolleyControl::MotorPowerCallback,this,std::placeholders::_1));
+        ImuPublisher = this->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
+        PowerInformation = this->create_publisher<std_msgs::msg::String>("PowerInformationData",1);
+        Timer = this->create_wall_timer(5ms,std::bind(&TrolleyControl::CarPubCallBack,this));
         serial::Timeout to = serial::Timeout::simpleTimeout(100);
-
-
-
-        RCLCPP_INFO(this->get_logger(), "尝试打开: 串口%s,波特率%d",serialPort.c_str(),baudrate);
-
-
-
-
-        sp.setPort(serialPort);
-        sp.setBaudrate(baudrate);
-        sp.setTimeout(to);
+        Sp.setPort(serialPort);
+        Sp.setBaudrate(baudrate);
+        Sp.setTimeout(to);
 
         try
         {
-            sp.open();
+            Sp.open();
         }
-        catch (const std::exception &e)
+        catch(const std::exception& e)
         {
             std::cerr << e.what() << '\n';
             return;
         }
-        if (sp.isOpen())
+        if(Sp.isOpen())
         {
-            std::cout << "底层串口打开成功" << std::endl;
+            std::cout<<"底层串口打开成功"<<std::endl;
         }
-        else
-        {
-            return;
-        }
+        else{return;}
 
         // 初始化里程计数据
         current_time_ = this->now();
@@ -85,6 +78,20 @@ public:
         theta_ = 0.0;
 
         Thread = std::thread(&TrolleyControl::DataProcessingThread, this);
+
+        /*声明参数*/
+        this->declare_parameter<std::string>("LC_read_write", "read");                                          //读或写
+        this->declare_parameter<int32_t>("LC_Motion_control_instruction", 0);                                   //系统控制指令
+        this->declare_parameter<int32_t>("LC_System_operating_status", 0);                                      //系统运行状态
+        this->declare_parameter<float>("LC_Speed_closed_loop_controller_proportional_gain", 0);                 //速度闭环控制器 比例增益
+        this->declare_parameter<float>("LC_Speed_closed_loop_controller_integral_gain", 0);                     //速度闭环控制器 积分增益
+        this->declare_parameter<float>("LC_Speed_closed_loop_controller_differential_gain", 0);                 //速度闭环控制器 微分增益
+        this->declare_parameter<float>("LC_Speed_measurement_pulse_cycle_ratio", 0);                            //速度测算 脉冲周数比
+        this->declare_parameter<float>("LC_Speed_measures_the_circumference_of_the_wheel", 0);                  //速度测算 轮圆周长 单位：m
+        this->declare_parameter<float>("LC_Chassis_dimensions_Wheel_spacing_/2", 0);                            //底盘尺寸 轮间距/2 单位：m
+        this->declare_parameter<float>("LC_Chassis_dimensions_Axle_spacing_/2", 0);                             //底盘尺寸 轴间距/2 单位：m
+        this->declare_parameter<int32_t>("LC_Kinematic_model_type", 0);                                         //运动学模型类型
+        this->declare_parameter<float>("LC_IMU_Z-axis_course_Angle_zero_offset_correction_bias_value", 0.0);      //IMU Z 轴 航向角零偏修正偏置值
     }
 
     ~TrolleyControl()
@@ -93,8 +100,10 @@ public:
     }
 
 private:
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr MagnetSensorPub;
+
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr CarPub;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr RfidPub;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr MagnetSensorPub;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr TwistSub;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr IoOut;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr MotorPowerControlSub;
@@ -103,9 +112,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr PowerInformation;
     std::shared_ptr<tf2_ros::TransformBroadcaster> TfBroadcaster;
     rclcpp::TimerBase::SharedPtr Timer;
-    serial::Serial sp;
-    int baudrate = 0;
-    std::string serialPort;
+    serial::Serial Sp;
     std::thread Thread;
 
 
@@ -113,21 +120,24 @@ private:
     void DataProcessingThread();
     void DataProcessingThreadTwo();
     std::vector<uint8_t> DoubleToBytes(double value);
-    uint16_t Crc16(const std::vector<uint8_t> &data);
-    double BinaryToDouble(const std::vector<uint8_t> &byteData);
+    uint16_t Crc16(const std::vector<uint8_t>& data);
+    double BinaryToDouble(const std::vector<uint8_t>& byteData);
     void VelCallback(geometry_msgs::msg::Twist::SharedPtr twist_msg);
     void ImuDataProcess();
     void PowerData();
     void OdometerData();
-    double DirectionalInterception(int startIndex, int count, const std::vector<uint8_t> &byteData);
-    void Rfid(std::vector<uint8_t> &byteVector);
+    double DirectionalInterception(int startIndex,int count,const std::vector<uint8_t>& byteData);
+    void Rfid(std::vector<uint8_t>& byteVector);
     void MagneticLineSensor();
-    void EscapeVector(std::vector<uint8_t> &byteVector);
-    void CompoundVector(std::vector<uint8_t> &byteVector);
+    void EscapeVector(std::vector<uint8_t>& byteVector);
+    void CompoundVector(std::vector<uint8_t>& byteVector);
     void IoCallback(std_msgs::msg::String::SharedPtr io_msg);
     void MotorPowerCallback(std_msgs::msg::String::SharedPtr power_msg);
-    void MotorSpeedPositionControl(uint8_t id, double velocitypower);
-    void DataDelivery(uint8_t signbit, std::vector<uint8_t> &Vector);
+    void MotorSpeedPositionControl(uint8_t id,double velocitypower);
+    std::vector<uint8_t> DataDelivery(uint8_t signbit,std::vector<uint8_t>& Vector);
+    void LowerParameterOperation(std::string red_write,uint8_t address,float data);
+    bool DataCheck(std::vector<uint8_t>& data);
+    void ParameterService();
 
     double CarSpeed;
     double CarAngle;
@@ -140,6 +150,8 @@ private:
     bool Send_bit = false;
     bool Collision_Detection = false;
     int8_t Collision_Count = 0;
+    std::vector<uint8_t> Send_data;
+    std::string Old_reset;
 
     struct ImuInfo
     {
@@ -156,7 +168,8 @@ private:
         double roll;
         double yaw;
         double pitch;
-    } ImuStructural;
+    }ImuStructural;
+
 
     rclcpp::Time current_time_;
     rclcpp::Time last_time_;
@@ -184,19 +197,21 @@ void TrolleyControl::VelCallback(geometry_msgs::msg::Twist::SharedPtr twist_msg)
 **********************************************************************/
 void TrolleyControl::IoCallback(std_msgs::msg::String::SharedPtr io_msg)
 {
-    std::vector<uint8_t> Control_io = {0x03, 0x03, 0x00, 0x00};
-    if (io_msg->data == "1")
+    std::vector<uint8_t> Control_io = {0x03,0x03,0x00,0x00};
+    if(io_msg->data == "1")
     {
         Control_io[1] = {0x03};
-        RCLCPP_INFO(this->get_logger(), "开启12v输出。");
+        RCLCPP_INFO(this->get_logger(),"开启12v输出。");
     }
-    else if (io_msg->data == "0")
+    else if(io_msg->data == "0")
     {
         Control_io[1] = {0x00};
-        RCLCPP_INFO(this->get_logger(), "关闭12v输出。");
+        RCLCPP_INFO(this->get_logger(),"关闭12v输出。");
     }
 
-    DataDelivery(0x4f, Control_io);
+    Control_io = DataDelivery(0x4f,Control_io);
+    Sp.write(Control_io);
+    Control_io.clear();
 }
 
 /**********************************************************************
@@ -206,23 +221,23 @@ void TrolleyControl::IoCallback(std_msgs::msg::String::SharedPtr io_msg)
 **********************************************************************/
 void TrolleyControl::MotorPowerCallback(std_msgs::msg::String::SharedPtr power_msg)
 {
-    std::string Motor_id = "0";      // 电机编号
-    std::string Motor_pattern = "0"; // 电机输出模式
+    std::string Motor_id = "0";       //电机编号
+    std::string Motor_pattern = "0";    //电机输出模式
     double a = 0;
     Motor_id = power_msg->data[0];
     Motor_pattern = power_msg->data[1];
-    if (Motor_pattern == "0")
+    if(Motor_pattern == "0")
     {
         a = -1;
     }
-    else if (Motor_pattern == "1")
+    else if(Motor_pattern == "1")
     {
         a = 1;
-        RCLCPP_INFO(this->get_logger(), "关闭12v输出。");
+        RCLCPP_INFO(this->get_logger(),"关闭12v输出。");
     }
 
-    RCLCPP_INFO(this->get_logger(), "电机%s,功率%s", Motor_id.c_str(), Motor_pattern.c_str());
-    MotorSpeedPositionControl(static_cast<uint8_t>(std::stoi(Motor_id)), a);
+    RCLCPP_INFO(this->get_logger(),"电机%s,功率%s",Motor_id.c_str(),Motor_pattern.c_str());
+    MotorSpeedPositionControl(static_cast<uint8_t>(std::stoi(Motor_id)),a);
 }
 
 /**********************************************************************
@@ -230,14 +245,15 @@ void TrolleyControl::MotorPowerCallback(std_msgs::msg::String::SharedPtr power_m
 入口参数：id 电机id    velocitypower速度或功率
 返回  值：无
 **********************************************************************/
-void TrolleyControl::MotorSpeedPositionControl(uint8_t id, double velocitypower)
+void TrolleyControl::MotorSpeedPositionControl(uint8_t id,double velocitypower)
 {
     std::vector<uint8_t> SpeedPositionControl;
     std::vector<uint8_t> v_p = DoubleToBytes(velocitypower);
     SpeedPositionControl.push_back(id);
     SpeedPositionControl.insert(SpeedPositionControl.end(), v_p.begin(), v_p.end());
 
-    DataDelivery(0x50, SpeedPositionControl);
+    SpeedPositionControl = DataDelivery(0x50,SpeedPositionControl);
+    Sp.write(SpeedPositionControl);
 
     SpeedPositionControl.clear();
     v_p.clear();
@@ -250,41 +266,160 @@ void TrolleyControl::MotorSpeedPositionControl(uint8_t id, double velocitypower)
 **********************************************************************/
 void TrolleyControl::CarPubCallBack()
 {
-    std::vector<uint8_t> SendHexData;
+    ParameterService();
 
-    if (Collision_Detection == true)
-    {
-        if (Collision_Count < 10)
-        {
-            CarSpeed = -0.08;
-            CarAngle = 0.0;
-            Collision_Count++;
-        }
-        else if (Collision_Count == 10)
-        {
-            CarSpeed = 0;
-            Collision_Detection = false;
-        }
-    }
+    std::vector<uint8_t> SendHexData;
 
     std::vector<uint8_t> LeftWheelSpeed = DoubleToBytes(CarSpeed);
     std::vector<uint8_t> RightWheelSpeed = DoubleToBytes(CarSpeed);
     std::vector<uint8_t> AngularVelocity = DoubleToBytes(CarAngle);
-
     SendHexData.insert(SendHexData.end(), LeftWheelSpeed.begin(), LeftWheelSpeed.end());
     SendHexData.insert(SendHexData.end(), RightWheelSpeed.begin(), RightWheelSpeed.end());
     SendHexData.insert(SendHexData.end(), AngularVelocity.begin(), AngularVelocity.end());
 
-    if (Send_bit == true)
+    if(Send_bit == true)
     {
-        DataDelivery(0x4b, SendHexData);
+        SendHexData = DataDelivery(0x4b,SendHexData);
+        Sp.write(SendHexData);
         Send_bit = false;
     }
 
+    Send_data.clear();
     LeftWheelSpeed.clear();
     RightWheelSpeed.clear();
     AngularVelocity.clear();
     SendHexData.clear();
+}
+
+/**********************************************************************
+函数功能：ros参数读写操作
+入口参数：无
+返回  值：无
+**********************************************************************/
+void TrolleyControl::ParameterService()
+{
+    std::string LC_read_write;
+    this->get_parameter("LC_read_write", LC_read_write);
+
+    int32_t LC_Motion_control_instruction;
+    this->get_parameter("LC_Motion_control_instruction", LC_Motion_control_instruction);
+
+    int32_t LC_System_operating_status;
+    this->get_parameter("LC_System_operating_status", LC_System_operating_status);
+
+    float KP;
+    this->get_parameter("LC_Speed_closed_loop_controller_proportional_gain", KP);
+
+    float KI;
+    this->get_parameter("LC_Speed_closed_loop_controller_integral_gain", KI);
+
+    float KD;
+    this->get_parameter("LC_Speed_closed_loop_controller_differential_gain", KD);
+
+    float MPE;
+    this->get_parameter("LC_Speed_measurement_pulse_cycle_ratio", MPE);
+
+    float MPC;
+    this->get_parameter("LC_Speed_measures_the_circumference_of_the_wheel", MPC);
+
+    float LA;
+    this->get_parameter("LC_Chassis_dimensions_Wheel_spacing_/2", LA);
+
+    float LB;
+    this->get_parameter("LC_Chassis_dimensions_Axle_spacing_/2", LB);
+
+    int32_t KMTT;
+    this->get_parameter("LC_Kinematic_model_type", KMTT);
+
+    float ZOFS;
+    this->get_parameter("LC_IMU_Z-axis_course_Angle_zero_offset_correction_bias_value", ZOFS);
+    //RCLCPP_INFO(this->get_logger(), "LC_IMU_Z: %f", ZOFS);
+    if(Old_reset != LC_read_write)
+    {
+        if(LC_read_write == "read")
+        {
+            LowerParameterOperation(LC_read_write,4,0);
+            LowerParameterOperation(LC_read_write,8,0);
+            LowerParameterOperation(LC_read_write,12,0);
+            LowerParameterOperation(LC_read_write,16,0);
+            LowerParameterOperation(LC_read_write,20,0);
+            LowerParameterOperation(LC_read_write,24,0);
+            LowerParameterOperation(LC_read_write,28,0);
+            LowerParameterOperation(LC_read_write,32,0);
+            LowerParameterOperation(LC_read_write,36,0);
+            LowerParameterOperation(LC_read_write,40,0);
+        }
+        else if(LC_read_write == "write")
+        {
+            LowerParameterOperation(LC_read_write,0,LC_System_operating_status);
+            LowerParameterOperation(LC_read_write,8,KP);
+            LowerParameterOperation(LC_read_write,12,KI);
+            LowerParameterOperation(LC_read_write,16,KD);
+            LowerParameterOperation(LC_read_write,20,MPE);
+            LowerParameterOperation(LC_read_write,24,MPC);
+            LowerParameterOperation(LC_read_write,28,LA);
+            LowerParameterOperation(LC_read_write,32,LB);
+            LowerParameterOperation(LC_read_write,36,KMTT);
+            LowerParameterOperation(LC_read_write,40,ZOFS);
+        }
+    }
+
+    Old_reset = LC_read_write;
+}
+
+/**********************************************************************
+函数功能：下位参数读写操作
+入口参数：red_write读取或写入  address写入的地址  data写入的数据
+返回  值：无
+**********************************************************************/
+void TrolleyControl::LowerParameterOperation(std::string red_write,uint8_t address,float date)
+{
+    std::vector<uint8_t> read;
+    std::vector<uint8_t> write_in;
+    std::vector<uint8_t> datTransformed_date;
+
+    // 获取高字节
+    uint8_t highByte = (address >> 8) & 0xFF;
+    // 获取低字节
+    uint8_t lowByte = address & 0xFF;
+
+    if(red_write == "read")
+    {
+        read.push_back(highByte);
+        read.push_back(lowByte);
+        read.push_back(0x00);
+        read.push_back(0x04);
+
+        read = DataDelivery(0x52,read);
+        Sp.write(read);
+        //  for (const auto &element : read)
+        // {
+        //     std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(element) << " ";
+        // }
+        // std::cout << std::dec << std::endl;
+    }
+    else if(red_write == "write")
+    {
+        write_in.push_back(highByte);
+        write_in.push_back(lowByte);
+        // 将浮点数的字节表示转换为 std::vector<uint8_t>
+        std::vector<uint8_t> byteVector(sizeof(float));
+        std::memcpy(byteVector.data(), &date, sizeof(float));
+        datTransformed_date = byteVector;
+        write_in.insert(write_in.end(), datTransformed_date.begin(), datTransformed_date.end());
+        write_in = DataDelivery(0x57,write_in);
+        byteVector.clear();
+        Sp.write(write_in);
+        // for (const auto &element : write_in)
+        // {
+        //     std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(element) << " ";
+        // }
+        // std::cout << std::dec << std::endl;
+    }
+    Send_data.clear();
+    read.clear();
+    write_in.clear();
+    datTransformed_date.clear();
 }
 
 /**********************************************************************
@@ -296,7 +431,7 @@ void TrolleyControl::ImuDataProcess()
 {
     std::vector<uint8_t> subVector;
 
-    if (DataJudgment == true)
+    if(DataJudgment == true)
     {
         RCLCPP_INFO(get_logger(), "串口打开正确！！！");
         DataJudgment = false;
@@ -304,82 +439,74 @@ void TrolleyControl::ImuDataProcess()
 
     try
     {
-        if (ImuData[4] == 0x00)
+        if(ImuData[4] == 0x00)
         {
-            if (ImuData.size() == 32)
-            {
-                subVector.insert(subVector.begin(), ImuData.begin() + 5, ImuData.begin() + 13);
-                ImuStructural.axaxis = BinaryToDouble(subVector);
-                subVector.clear();
+            subVector.insert(subVector.begin(), ImuData.begin() + 5, ImuData.begin() + 13);
+            ImuStructural.axaxis = BinaryToDouble(subVector);
+            subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 13, ImuData.begin() + 21);
-                ImuStructural.ayaxis = BinaryToDouble(subVector);
-                subVector.clear();
+            subVector.insert(subVector.begin(), ImuData.begin() + 13, ImuData.begin() + 21);
+            ImuStructural.ayaxis = BinaryToDouble(subVector);
+            subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 21, ImuData.begin() + 29);
-                ImuStructural.azaxis = BinaryToDouble(subVector);
-                subVector.clear();
-            }
+            subVector.insert(subVector.begin(), ImuData.begin() + 21, ImuData.begin() + 29);
+            ImuStructural.azaxis = BinaryToDouble(subVector);
+            subVector.clear();
+
         }
-        else if (ImuData[4] == 0x01)
+        else if(ImuData[4] == 0x01)
         {
-            if (ImuData.size() == 32)
-            {
-                subVector.insert(subVector.begin(), ImuData.begin() + 5, ImuData.begin() + 13);
-                ImuStructural.gxaxis = BinaryToDouble(subVector);
-                subVector.clear();
+            subVector.insert(subVector.begin(), ImuData.begin() + 5, ImuData.begin() + 13);
+            ImuStructural.gxaxis = BinaryToDouble(subVector);
+            subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 13, ImuData.begin() + 21);
-                ImuStructural.gyaxis = BinaryToDouble(subVector);
-                subVector.clear();
+            subVector.insert(subVector.begin(), ImuData.begin() + 13, ImuData.begin() + 21);
+            ImuStructural.gyaxis = BinaryToDouble(subVector);
+            subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 21, ImuData.begin() + 29);
-                ImuStructural.gzaxis = BinaryToDouble(subVector);
-                subVector.clear();
-            }
+            subVector.insert(subVector.begin(), ImuData.begin() + 21, ImuData.begin() + 29);
+            ImuStructural.gzaxis = BinaryToDouble(subVector);
+            subVector.clear();
         }
-        else if (ImuData[4] == 0x02)
+        else if(ImuData[4] == 0x02)
         {
-            if (ImuData.size() == 40)
-            {
-                subVector.insert(subVector.begin(), ImuData.begin() + 5, ImuData.begin() + 13);
-                ImuStructural.q0 = BinaryToDouble(subVector);
-                subVector.clear();
+            subVector.insert(subVector.begin(), ImuData.begin() + 5, ImuData.begin() + 13);
+            ImuStructural.q0 = BinaryToDouble(subVector);
+            subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 13, ImuData.begin() + 21);
-                ImuStructural.q1 = BinaryToDouble(subVector);
-                subVector.clear();
+            subVector.insert(subVector.begin(), ImuData.begin() + 13, ImuData.begin() + 21);
+            ImuStructural.q1 = BinaryToDouble(subVector);
+            subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 21, ImuData.begin() + 29);
-                ImuStructural.q2 = BinaryToDouble(subVector);
-                subVector.clear();
+            subVector.insert(subVector.begin(), ImuData.begin() + 21, ImuData.begin() + 29);
+            ImuStructural.q2 = BinaryToDouble(subVector);
+            subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 29, ImuData.begin() + 37);
-                ImuStructural.q3 = BinaryToDouble(subVector);
-                subVector.clear();
-            }
+            subVector.insert(subVector.begin(), ImuData.begin() + 29, ImuData.begin() + 37);
+            ImuStructural.q3 = BinaryToDouble(subVector);
+            subVector.clear();
         }
-        else if (ImuData[4] == 0x03)
+        else if(ImuData[4] == 0x03)
         {
-            if (ImuData.size() == 32)
-            {
-                subVector.insert(subVector.begin(), ImuData.begin() + 5, ImuData.begin() + 13);
-                ImuStructural.pitch = BinaryToDouble(subVector);
-                subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 13, ImuData.begin() + 21);
-                ImuStructural.roll = BinaryToDouble(subVector);
-                subVector.clear();
+            subVector.insert(subVector.begin(), ImuData.begin() + 5, ImuData.begin() + 13);
+            ImuStructural.pitch = BinaryToDouble(subVector);
+            subVector.clear();
 
-                subVector.insert(subVector.begin(), ImuData.begin() + 21, ImuData.begin() + 29);
-                ImuStructural.yaw = BinaryToDouble(subVector);
-                subVector.clear();
-            }
+            subVector.insert(subVector.begin(), ImuData.begin() + 13, ImuData.begin() + 21);
+            ImuStructural.roll = BinaryToDouble(subVector);
+            subVector.clear();
+
+            subVector.insert(subVector.begin(), ImuData.begin() + 21, ImuData.begin() + 29);
+            ImuStructural.yaw = BinaryToDouble(subVector);
+            subVector.clear();
+
         }
+
     }
-    catch (const std::exception &e)
+    catch(const std::exception& e)
     {
-        // std::cerr << e.what() << '\n';
+        //std::cerr << e.what() << '\n';
     }
 
     auto message = sensor_msgs::msg::Imu();
@@ -396,13 +523,13 @@ void TrolleyControl::ImuDataProcess()
     message.orientation.z = ImuStructural.q2;
     message.orientation.w = ImuStructural.q3;
     tf2::Quaternion q;
-    q.setRPY(ImuStructural.roll / 180 * M_PI, ImuStructural.pitch / 180 * M_PI, ImuStructural.yaw / 180 * M_PI);
+    q.setRPY(ImuStructural.roll/180*M_PI,ImuStructural.pitch/180*M_PI,ImuStructural.yaw/180*M_PI);
     message.orientation.x = q.getX();
     message.orientation.y = q.getY();
     message.orientation.z = q.getZ();
     message.orientation.w = q.getW();
 
-    // std::cout<<"roll:"<<ImuStructural.roll<<" pitch:"<<ImuStructural.pitch<<" yaw:"<<ImuStructural.yaw<<std::endl;
+    std::cout<<"roll:"<<ImuStructural.roll<<" pitch:"<<ImuStructural.pitch<<" yaw:"<<ImuStructural.yaw<<std::endl;
 
     ImuPublisher->publish(message);
 
@@ -416,14 +543,14 @@ void TrolleyControl::ImuDataProcess()
 **********************************************************************/
 void TrolleyControl::PowerData()
 {
-    // 总线电流
-    double bus = DirectionalInterception(4, 8, NativeData);
-    // 5v输出
-    double output = DirectionalInterception(12, 8, NativeData);
-    // 输入电压
-    double input = DirectionalInterception(20, 8, NativeData);
-    // 19v输出
-    double output19 = DirectionalInterception(28, 8, NativeData);
+    //总线电流
+    double bus = DirectionalInterception(4,8,NativeData);
+    //5v输出
+    double output = DirectionalInterception(12,8,NativeData);
+    //输入电压
+    double input = DirectionalInterception(20,8,NativeData);
+    //19v输出
+    double output19 = DirectionalInterception(28,8,NativeData);
 
     std::ostringstream oss;
     oss << bus << "," << output << "," << input << "," << output19;
@@ -441,19 +568,17 @@ void TrolleyControl::PowerData()
 **********************************************************************/
 void TrolleyControl::OdometerData()
 {
-    // x方向速度 vx ，y 方向速度 vy ，角速度 ωz
+    //x方向速度 vx ，y 方向速度 vy ，角速度 ωz
     double vx_chassis = 0;
     double vy_chassis = 0;
     double wz_chassis = 0;
-    if (NativeData.size() == 31)
-    {
-        vx_chassis = DirectionalInterception(4, 8, NativeData);
-        vy_chassis = DirectionalInterception(12, 8, NativeData);
-        wz_chassis = DirectionalInterception(20, 8, NativeData);
-        // std::cout<<"vx:"<<vx<<" vy:"<<vy<<" wz:"<<wz<<std::endl;
-    }
 
-    if (!TfBroadcaster)
+    vx_chassis = DirectionalInterception(4,8,NativeData);
+    vy_chassis = DirectionalInterception(12,8,NativeData);
+    wz_chassis = DirectionalInterception(20,8,NativeData);
+    //std::cout<<"vx:"<<vx<<" vy:"<<vy<<" wz:"<<wz<<std::endl;
+
+    if(!TfBroadcaster)
     {
         TfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this->shared_from_this());
     }
@@ -518,7 +643,7 @@ void TrolleyControl::OdometerData()
 入口参数：startIndex 开始下标    count 截取的元素个数   byteData 1组8bytes数据
 返回  值：double result
 **********************************************************************/
-double TrolleyControl::DirectionalInterception(int startIndex, int count, const std::vector<uint8_t> &byteData)
+double TrolleyControl::DirectionalInterception(int startIndex,int count,const std::vector<uint8_t>& byteData)
 {
     size_t startIndexs = startIndex;
     size_t counts = count;
@@ -532,10 +657,8 @@ double TrolleyControl::DirectionalInterception(int startIndex, int count, const 
 入口参数：std::vector<uint8_t>& byteData
 返回  值：double result
 **********************************************************************/
-double TrolleyControl::BinaryToDouble(const std::vector<uint8_t> &byteData)
-{
-    if (byteData.size() != sizeof(double))
-    {
+double TrolleyControl::BinaryToDouble(const std::vector<uint8_t>& byteData) {
+    if (byteData.size() != sizeof(double)) {
         std::cerr << "错误：二进制数据长度不符合 double 数据类型的长度。" << std::endl;
         return 0.0;
     }
@@ -550,13 +673,11 @@ double TrolleyControl::BinaryToDouble(const std::vector<uint8_t> &byteData)
 入口参数：double value
 返回  值：无
 **********************************************************************/
-std::vector<uint8_t> TrolleyControl::DoubleToBytes(double value)
-{
+std::vector<uint8_t> TrolleyControl::DoubleToBytes(double value) {
     std::vector<uint8_t> bytes;
-    uint8_t *ptr = reinterpret_cast<uint8_t *>(&value);
+    uint8_t* ptr = reinterpret_cast<uint8_t*>(&value);
 
-    for (size_t i = 0; i < sizeof(double); i++)
-    {
+    for (size_t i = 0; i < sizeof(double); i++) {
         bytes.push_back(*ptr);
         ptr++;
     }
@@ -569,22 +690,16 @@ std::vector<uint8_t> TrolleyControl::DoubleToBytes(double value)
 入口参数：需要计算 CRC-16 的输入数据。
 返回  值：CRC-16 校验和值。
 **********************************************************************/
-uint16_t TrolleyControl::Crc16(const std::vector<uint8_t> &data)
-{
+uint16_t TrolleyControl::Crc16(const std::vector<uint8_t>& data) {
     const uint16_t polynomial = 0xA001;
     uint16_t crc = 0xFFFF;
 
-    for (auto byte : data)
-    {
+    for (auto byte : data) {
         crc ^= byte;
-        for (int i = 0; i < 8; ++i)
-        {
-            if (crc & 1)
-            {
+        for (int i = 0; i < 8; ++i) {
+            if (crc & 1) {
                 crc = (crc >> 1) ^ polynomial;
-            }
-            else
-            {
+            } else {
                 crc = crc >> 1;
             }
         }
@@ -598,17 +713,16 @@ uint16_t TrolleyControl::Crc16(const std::vector<uint8_t> &data)
 入口参数：uint8_t signbit 标志位        std::vector<uint8_t>& Vector 数据
 返回  值：无
 **********************************************************************/
-void TrolleyControl::DataDelivery(uint8_t signbit, std::vector<uint8_t> &Vector)
+std::vector<uint8_t> TrolleyControl::DataDelivery(uint8_t signbit,std::vector<uint8_t>& Vector)
 {
-    std::vector<uint8_t> Send_data;
+    // std::vector<uint8_t> Send_data;
     std::vector<uint8_t> ResultBytes;
-    // 数据长度计算
+    //数据长度计算
     std::size_t DataLength = Vector.size();
-    // 处理数据长度
+    //处理数据长度
     std::vector<uint8_t> Data_length_;
     Data_length_.push_back(DataLength & 0xFF);
-    if ((DataLength >> 8) != 0x00)
-    {
+    if ((DataLength >> 8) != 0x00) {
         Data_length_.push_back((DataLength >> 8) & 0xFF);
     }
     Send_data.push_back(signbit);
@@ -625,13 +739,12 @@ void TrolleyControl::DataDelivery(uint8_t signbit, std::vector<uint8_t> &Vector)
 
     Send_data.push_back(0x0A);
     Send_data.push_back(0x0D);
-    Send_data.insert(Send_data.begin(), 0x3A);
+    Send_data.insert(Send_data.begin(),0x3A);
 
-    sp.write(Send_data);
-
-    Send_data.clear();
     ResultBytes.clear();
     Data_length_.clear();
+
+    return Send_data;
 }
 
 /**********************************************************************
@@ -639,31 +752,24 @@ void TrolleyControl::DataDelivery(uint8_t signbit, std::vector<uint8_t> &Vector)
 入口参数：std::vector<std::string>& strVector
 返回  值：无
 **********************************************************************/
-void TrolleyControl::EscapeVector(std::vector<uint8_t> &byteVector)
-{
-    for (size_t i = 0; i < byteVector.size() - 1; ++i)
-    {
-        if (byteVector[i] == 0x5c)
-        {
-            if (byteVector[i + 1] == 0x00)
-            {
+void TrolleyControl::EscapeVector(std::vector<uint8_t>& byteVector) {
+    for (size_t i = 0; i < byteVector.size() - 1; ++i) {
+        if (byteVector[i] == 0x5c) {
+            if (byteVector[i + 1] == 0x00) {
                 // 将 5c 00 替换为 5c
                 byteVector.erase(byteVector.begin() + i + 1);
             }
-            else if (byteVector[i + 1] == 0x01)
-            {
+            else if (byteVector[i + 1] == 0x01) {
                 // 将 5c 01 替换为 3a
                 byteVector[i] = 0x3a;
                 byteVector.erase(byteVector.begin() + i + 1);
             }
-            else if (byteVector[i + 1] == 0x02)
-            {
+            else if (byteVector[i + 1] == 0x02) {
                 // 将 5c 02 替换为 0a
                 byteVector[i] = 0x0a;
                 byteVector.erase(byteVector.begin() + i + 1);
             }
-            else if (byteVector[i + 1] == 0x03)
-            {
+            else if (byteVector[i + 1] == 0x03) {
                 // 将 5c 03 替换为 0d
                 byteVector[i] = 0x0d;
                 byteVector.erase(byteVector.begin() + i + 1);
@@ -677,39 +783,63 @@ void TrolleyControl::EscapeVector(std::vector<uint8_t> &byteVector)
 入口参数：std::vector<std::string>& byteVector
 返回  值：无
 **********************************************************************/
-void TrolleyControl::CompoundVector(std::vector<uint8_t> &byteVector)
+void TrolleyControl::CompoundVector(std::vector<uint8_t>& byteVector)
 {
-    std::vector<uint8_t> modifiedVector; // 用于存储修改后的值
+    std::vector<uint8_t> modifiedVector;  // 用于存储修改后的值
 
-    for (uint8_t byte : byteVector)
-    {
-        if (byte == 0x5C)
-        {
+    for (uint8_t byte : byteVector) {
+        if (byte == 0x5C) {
             modifiedVector.push_back(0x5C);
             modifiedVector.push_back(0x00);
-        }
-        else if (byte == 0x3A)
-        {
+        } else if (byte == 0x3A) {
             modifiedVector.push_back(0x5C);
             modifiedVector.push_back(0x01);
-        }
-        else if (byte == 0x0A)
-        {
+        } else if (byte == 0x0A) {
             modifiedVector.push_back(0x5C);
             modifiedVector.push_back(0x02);
-        }
-        else if (byte == 0x0D)
-        {
+        } else if (byte == 0x0D) {
             modifiedVector.push_back(0x5C);
             modifiedVector.push_back(0x03);
-        }
-        else
-        {
+        } else {
             modifiedVector.push_back(byte);
         }
     }
 
-    byteVector = modifiedVector; // 将原始向量替换为修改后的向量
+    byteVector = modifiedVector;  // 将原始向量替换为修改后的向量
+}
+
+/**********************************************************************
+函数功能：数据校验
+入口参数：校验数据
+返回  值：是否通过校验
+**********************************************************************/
+bool TrolleyControl::DataCheck(std::vector<uint8_t>& data)
+{
+    std::vector<uint8_t> extractedData;
+
+    if (data.size() >= 7)
+    {
+        extractedData.assign(data.begin() + 2, data.end() - 3);
+    }
+    else
+    {
+        //std::cerr << "Data doesn't have enough elements." << std::endl;
+        return false; // 返回 false 表示数据不符合要求
+    }
+
+    uint16_t result = Crc16(extractedData);
+    uint16_t result_h = (result & 0xFF);
+    uint16_t result_l = (result >> 8);
+
+    if(result_h == data[data.size() - 3] && result_l == data[data.size() - 2])
+    {
+
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 /**********************************************************************
@@ -722,62 +852,73 @@ void TrolleyControl::DataProcessingThread()
     while (true)
     {
         std::string str;
-        size_t n = sp.available();
-        if (n != 0)
+        size_t n = Sp.available();
+        if(n != 0)
         {
-            str = sp.readline();
+            str = Sp.readline();
             std::vector<uint8_t> buffer(str.begin(), str.end());
             NativeData = buffer;
 
-            EscapeVector(NativeData);
+            bool DataCheck_bit = DataCheck(NativeData);
 
-            try
+            if(DataCheck_bit == true)
             {
-                switch (NativeData[2])
+                EscapeVector(NativeData);
+                try
                 {
-                case 0x41: // 电源树 总线电流、5V 输出、输入电压、19V 输出。
-                    PowerData();
-                    break;
-                case 0x45: // 磁条数据
-                    MagneticLineSensor();
-                    break;
-                case 0x51: // imu数据
-                    ImuData = NativeData;
-                    ImuDataProcess();
-                    break;
-                case 0x52: // rfid数据
-                    Rfid(NativeData);
-                    break;
-                case 0x56: // 电机数据
+                    switch (NativeData[2])
+                    {
+                        case 0x41:  //电源树 总线电流、5V 输出、输入电压、19V 输出。
+                            PowerData();
+                            break;
+                        case 0x42:  //参数读取操作返回内容
+                            for (const auto &element : NativeData)
+                            {
+                                // std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(element) << " ";
+                            }
+                            // std::cout << std::dec << std::endl;
+                            break;
+                        case 0x45:  //磁条数据
+                            MagneticLineSensor();
+                            break;
+                        case 0x51:  //imu数据
+                            ImuData = NativeData;
+                            ImuDataProcess();
+                            break;
+                        case 0x52:  //rfid数据
+                            Rfid(NativeData);
+                            break;
+                        case 0x56:  //电机数据
 
-                    break;
-                case 0x57: // 电机控制数据
+                            break;
+                        case 0x57:  //电机控制数据
 
-                    break;
-                case 0x53: // 四个电机的相关数据
+                            break;
+                        case 0x53:  //四个电机的相关数据
 
-                    break;
-                case 0x54: // 数字式温度传感器
+                            break;
+                        case 0x54:  //数字式温度传感器
 
-                    break;
-                case 0x55: // 超声数据
-                    // 将位置 4 和 5 的数据组合成一个 16 位无符号整数
-                    UltrasonicSensorData = static_cast<float>((NativeData[4] << 8) | NativeData[5]);
-                    break;
+                            break;
+                        case 0x55:   //超声数据
+                            // 将位置 4 和 5 的数据组合成一个 16 位无符号整数
+                            UltrasonicSensorData = static_cast<float>((NativeData[4] << 8) | NativeData[5]);
+                            break;
+                    }
+                    if(NativeData[2] == 0x4b)  //里程计
+                    {
+                        OdometerData();
+                        // for (const auto &element : NativeData)
+                        // {
+                        //     std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(element) << " ";
+                        // }
+                        // std::cout << std::dec << std::endl;
+                    }
                 }
-                if (NativeData[2] == 0x4b) // 里程计
+                catch(const std::exception& e)
                 {
-                    OdometerData();
-                    // for (const auto &element : NativeData)
-                    // {
-                    //     std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(element) << " ";
-                    // }
-                    // std::cout << std::dec << std::endl;
+                    //std::cerr << e.what() << '\n';
                 }
-            }
-            catch (const std::exception &e)
-            {
-                // std::cerr << e.what() << '\n';
             }
         }
         NativeData.clear();
@@ -786,14 +927,13 @@ void TrolleyControl::DataProcessingThread()
     }
 }
 
-void TrolleyControl::Rfid(std::vector<uint8_t> &byteVector)
+void TrolleyControl::Rfid(std::vector<uint8_t>& byteVector)
 {
     auto msg = std_msgs::msg::String();
 
     // 使用 std::stringstream 构建十六进制字符串
     std::stringstream ss;
-    for (const auto &byte : byteVector)
-    {
+    for (const auto &byte : byteVector) {
         // 将 uint8_t 格式化为十六进制并追加到 stringstream 中
         ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
     }
@@ -801,24 +941,24 @@ void TrolleyControl::Rfid(std::vector<uint8_t> &byteVector)
     // 从 stringstream 中获取字符串
     std::string hexString = ss.str();
     msg.data = hexString;
-    if (hexString.length() == 46){
+    if(hexString.size()==46)
+    {
         RfidPub->publish(msg);
-    }   
+    }
 }
 
 void TrolleyControl::MagneticLineSensor()
 {
     std::stringstream ss;
-    for (uint8_t hexValue : NativeData)
-    {
+    for (uint8_t hexValue : NativeData) {
         ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(hexValue);
     }
     std::string FullHexString = ss.str();
     // 截取字符串的一部分并赋值给 MagneticSensorData
-    size_t startIndex = 8; // 从第三个字符开始（索引从0开始）
-    size_t length = 32;    // 截取32个字符
+    size_t startIndex = 8;  // 从第三个字符开始（索引从0开始）
+    size_t length = 32;      // 截取32个字符
     MagneticSensorData = FullHexString.substr(startIndex, length);
-    if (MagneticSensorData[21] == 'f')
+    if(MagneticSensorData[21] == 'f')
     {
         Collision_Detection = true;
         Collision_Count = 0;
@@ -827,16 +967,15 @@ void TrolleyControl::MagneticLineSensor()
     auto msg = std_msgs::msg::String();
     msg.data =  MagneticSensorData;
     MagnetSensorPub->publish(msg);
-
-    rclcpp::Time RosTimestamp = rclcpp::Clock().now();
     MagneticSensorData.clear();
 }
-int main(int argc, char *argv[])
+int main(int argc, char * argv[])
 {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<TrolleyControl>();
-
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;
 }
+
+

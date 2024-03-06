@@ -2,3 +2,15 @@ ums_fiction_driver_node:
   ros__parameters:
     baudrate: 912000
     port: /dev/ums_fiction
+    LC_Chassis_dimensions_Axle_spacing_/2: 0.0
+    LC_Chassis_dimensions_Wheel_spacing_/2: 0.0
+    LC_IMU_Z-axis_course_Angle_zero_offset_correction_bias_value: 0.0
+    LC_Kinematic_model_type: 0
+    LC_Motion_control_instruction: 0
+    LC_Speed_closed_loop_controller_differential_gain: 0.0
+    LC_Speed_closed_loop_controller_integral_gain: 0.0
+    LC_Speed_closed_loop_controller_proportional_gain: 0.0
+    LC_Speed_measurement_pulse_cycle_ratio: 0.0
+    LC_Speed_measures_the_circumference_of_the_wheel: 0.0
+    LC_System_operating_status: 0
+    LC_read_write: read
