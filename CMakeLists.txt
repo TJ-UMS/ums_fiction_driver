@@ -61,7 +61,7 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY launch param
+install(DIRECTORY launch param script
         DESTINATION share/${PROJECT_NAME})
 
 ament_package()
