@@ -1,0 +1,4 @@
+ums_fiction_driver_node:
+  ros__parameters:
+    baudrate: 912000
+    port: /dev/ttyUSB0
