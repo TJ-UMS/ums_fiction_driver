@@ -14,533 +14,15 @@
 #include "tf2/LinearMath/Quaternion.h"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include "sensor_msgs/msg/imu.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/pose_with_covariance.hpp"
 #include "geometry_msgs/msg/twist_with_covariance.hpp"
+#include "ums/crc.h"
+#include "ums/params.h"
 
 using namespace std::chrono_literals;
-
-// CRC高位字节值表
-const uint8_t auchCRCHi[] = {
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x01,
-    0xC0,
-    0x80,
-    0x41,
-    0x00,
-    0xC1,
-    0x81,
-    0x40,
-};
-
-// CRC低位字节值表
-const uint8_t auchCRCLo[] = {
-    0x00,
-    0xC0,
-    0xC1,
-    0x01,
-    0xC3,
-    0x03,
-    0x02,
-    0xC2,
-    0xC6,
-    0x06,
-    0x07,
-    0xC7,
-    0x05,
-    0xC5,
-    0xC4,
-    0x04,
-    0xCC,
-    0x0C,
-    0x0D,
-    0xCD,
-    0x0F,
-    0xCF,
-    0xCE,
-    0x0E,
-    0x0A,
-    0xCA,
-    0xCB,
-    0x0B,
-    0xC9,
-    0x09,
-    0x08,
-    0xC8,
-    0xD8,
-    0x18,
-    0x19,
-    0xD9,
-    0x1B,
-    0xDB,
-    0xDA,
-    0x1A,
-    0x1E,
-    0xDE,
-    0xDF,
-    0x1F,
-    0xDD,
-    0x1D,
-    0x1C,
-    0xDC,
-    0x14,
-    0xD4,
-    0xD5,
-    0x15,
-    0xD7,
-    0x17,
-    0x16,
-    0xD6,
-    0xD2,
-    0x12,
-    0x13,
-    0xD3,
-    0x11,
-    0xD1,
-    0xD0,
-    0x10,
-    0xF0,
-    0x30,
-    0x31,
-    0xF1,
-    0x33,
-    0xF3,
-    0xF2,
-    0x32,
-    0x36,
-    0xF6,
-    0xF7,
-    0x37,
-    0xF5,
-    0x35,
-    0x34,
-    0xF4,
-    0x3C,
-    0xFC,
-    0xFD,
-    0x3D,
-    0xFF,
-    0x3F,
-    0x3E,
-    0xFE,
-    0xFA,
-    0x3A,
-    0x3B,
-    0xFB,
-    0x39,
-    0xF9,
-    0xF8,
-    0x38,
-    0x28,
-    0xE8,
-    0xE9,
-    0x29,
-    0xEB,
-    0x2B,
-    0x2A,
-    0xEA,
-    0xEE,
-    0x2E,
-    0x2F,
-    0xEF,
-    0x2D,
-    0xED,
-    0xEC,
-    0x2C,
-    0xE4,
-    0x24,
-    0x25,
-    0xE5,
-    0x27,
-    0xE7,
-    0xE6,
-    0x26,
-    0x22,
-    0xE2,
-    0xE3,
-    0x23,
-    0xE1,
-    0x21,
-    0x20,
-    0xE0,
-    0xA0,
-    0x60,
-    0x61,
-    0xA1,
-    0x63,
-    0xA3,
-    0xA2,
-    0x62,
-    0x66,
-    0xA6,
-    0xA7,
-    0x67,
-    0xA5,
-    0x65,
-    0x64,
-    0xA4,
-    0x6C,
-    0xAC,
-    0xAD,
-    0x6D,
-    0xAF,
-    0x6F,
-    0x6E,
-    0xAE,
-    0xAA,
-    0x6A,
-    0x6B,
-    0xAB,
-    0x69,
-    0xA9,
-    0xA8,
-    0x68,
-    0x78,
-    0xB8,
-    0xB9,
-    0x79,
-    0xBB,
-    0x7B,
-    0x7A,
-    0xBA,
-    0xBE,
-    0x7E,
-    0x7F,
-    0xBF,
-    0x7D,
-    0xBD,
-    0xBC,
-    0x7C,
-    0xB4,
-    0x74,
-    0x75,
-    0xB5,
-    0x77,
-    0xB7,
-    0xB6,
-    0x76,
-    0x72,
-    0xB2,
-    0xB3,
-    0x73,
-    0xB1,
-    0x71,
-    0x70,
-    0xB0,
-    0x50,
-    0x90,
-    0x91,
-    0x51,
-    0x93,
-    0x53,
-    0x52,
-    0x92,
-    0x96,
-    0x56,
-    0x57,
-    0x97,
-    0x55,
-    0x95,
-    0x94,
-    0x54,
-    0x9C,
-    0x5C,
-    0x5D,
-    0x9D,
-    0x5F,
-    0x9F,
-    0x9E,
-    0x5E,
-    0x5A,
-    0x9A,
-    0x9B,
-    0x5B,
-    0x99,
-    0x59,
-    0x58,
-    0x98,
-    0x88,
-    0x48,
-    0x49,
-    0x89,
-    0x4B,
-    0x8B,
-    0x8A,
-    0x4A,
-    0x4E,
-    0x8E,
-    0x8F,
-    0x4F,
-    0x8D,
-    0x4D,
-    0x4C,
-    0x8C,
-    0x44,
-    0x84,
-    0x85,
-    0x45,
-    0x87,
-    0x47,
-    0x46,
-    0x86,
-    0x82,
-    0x42,
-    0x43,
-    0x83,
-    0x41,
-    0x81,
-    0x80,
-    0x40,
-};
 
 class TrolleyControl : public rclcpp::Node
 {
@@ -612,6 +94,9 @@ public:
         this->declare_parameter<float>("LB", 0);                       // 底盘尺寸 轴间距/2 单位：m
         this->declare_parameter<int32_t>("KMTT", 0);                   // 运动学模型类型
         this->declare_parameter<float>("IMU_Z", 0.0);                  // IMU Z 轴 航向角零偏修正偏置值
+        // 添加参数监听器
+        parameter_event_subscriber_ = this->create_subscription<rcl_interfaces::msg::ParameterEvent>(
+                "/parameter_events", 10, std::bind(&TrolleyControl::parameter_callback, this, std::placeholders::_1));
     }
 
     ~TrolleyControl()
@@ -634,7 +119,10 @@ private:
     serial::Serial Sp;
     std::thread Thread;
 
-    std::thread ThreadReadParams;
+    rclcpp::ParameterCallbackHandle callback_handle_;
+    rclcpp::Subscription<rcl_interfaces::msg::ParameterEvent>::SharedPtr parameter_event_subscriber_;
+  
+    void parameter_callback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event);
 
     void CarPubCallBack();
     void DataProcessingThread();
@@ -699,12 +187,94 @@ private:
         double pitch;
     } ImuStructural;
 
+    ParamsData ReadData;
+
     rclcpp::Time current_time_;
     rclcpp::Time last_time_;
     double x_;
     double y_;
     double theta_;
 };
+
+void TrolleyControl::parameter_callback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
+{
+
+    if (initRead)
+    {
+        bool current_write = false;
+        for (const auto & parameter  : event->changed_parameters)
+        {
+            if (parameter.name == "KP" && parameter.value.double_value != ReadData.KP)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'KP' has been updated to: %f", parameter.value.double_value);
+                LowerParameterOperation("write", 8, parameter.value.double_value);
+                current_write = true;
+                ReadData.KP = parameter.value.double_value;
+            }
+            else if (parameter.name == "KI" && parameter.value.double_value != ReadData.KI)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'KI' has been updated to: %f", parameter.value.double_value);
+                LowerParameterOperation("write", 12, parameter.value.double_value);
+                current_write = true;
+                ReadData.KI = parameter.value.double_value;
+            }
+            else if (parameter.name == "KD" && parameter.value.double_value != ReadData.KD)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'KD' has been updated to: %f", parameter.value.double_value);
+                LowerParameterOperation("write", 16, parameter.value.double_value);
+                current_write = true;
+                ReadData.KD = parameter.value.double_value;
+            }
+            else if (parameter.name == "MPE" && parameter.value.double_value != ReadData.MPE)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'MPE' has been updated to: %f", parameter.value.double_value);
+                LowerParameterOperation("write", 20, parameter.value.double_value);
+                current_write = true;
+                ReadData.MPE = parameter.value.double_value;
+            }
+            else if (parameter.name == "MPC" && parameter.value.double_value != ReadData.MPC)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'MPC' has been updated to: %f", parameter.value.double_value);
+                LowerParameterOperation("write", 24, parameter.value.double_value);
+                current_write = true;
+                ReadData.MPC = parameter.value.double_value;
+            }
+            else if (parameter.name == "LA" && parameter.value.double_value != ReadData.LA)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'LA' has been updated to: %f", parameter.value.double_value);
+                LowerParameterOperation("write", 28, parameter.value.double_value);
+                current_write = true;
+                ReadData.LA = parameter.value.double_value;
+            }
+            else if (parameter.name == "LB" && parameter.value.double_value != ReadData.LB)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'LB' has been updated to: %f", parameter.value.double_value);
+                LowerParameterOperation("write", 32, parameter.value.double_value);
+                current_write = true;
+                ReadData.LB = parameter.value.double_value;
+            }
+            else if (parameter.name == "KMTT" && parameter.value.integer_value != ReadData.KMTT)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'KMTT' has been updated to: %ld", parameter.value.integer_value);
+                LowerParameterOperationInt("write", 36, parameter.value.integer_value);
+                current_write = true;
+                ReadData.KMTT = parameter.value.integer_value;
+            }
+            else if (parameter.name == "IMU_Z" && parameter.value.double_value != ReadData.IMU_Z)
+            {
+                RCLCPP_INFO(get_logger(), "Parameter 'IMU_Z' has been updated to: %f", parameter.value.double_value);
+                LowerParameterOperation("write", 40, parameter.value.double_value);
+                current_write = true;
+                ReadData.IMU_Z = parameter.value.double_value;
+            }
+        }
+        if (current_write)
+        {
+            // 重新读取验证下位是否修改成功
+            TdParamsRead();
+        }
+    }
+}
 /**********************************************************************
 函数功能：订阅cmd_vel
 入口参数：geometry_msgs::msg::Twist::SharedPtr twist_msg
@@ -802,7 +372,6 @@ void TrolleyControl::TdParamsRead()
 **********************************************************************/
 void TrolleyControl::CarPubCallBack()
 {
-    ParameterService();
 
     std::vector<uint8_t> SendHexData;
     std::vector<uint8_t> LeftWheelSpeed = DoubleToBytes(CarSpeed);
@@ -817,6 +386,15 @@ void TrolleyControl::CarPubCallBack()
         SendHexData = DataDelivery(0x4b, SendHexData);
         Sp.write(SendHexData);
         Send_bit = false;
+    }
+
+    if (!initRead)
+    {
+        // 首次启动YAML文件默认读取参数并写入下位
+        ParameterService();
+        // 读取下位参数，检验是否写入成功
+        TdParamsRead();
+        initRead = true;
     }
 
     Send_data.clear();
@@ -869,28 +447,25 @@ void TrolleyControl::ParameterService()
     float ZOFS;
     this->get_parameter("IMU_Z", ZOFS);
     // RCLCPP_INFO(this->get_logger(), "LC_IMU_Z: %f", ZOFS);
-    if (Old_reset != LC_read_write)
-    {
-        if (LC_read_write == "read")
-        {
-            LowerParameterOperation("read", 0, 0);
-        }
-        else if (LC_read_write == "write")
-        {
-            //            LowerParameterOperation(LC_read_write, 0, LC_System_operating_status);
-            LowerParameterOperation(LC_read_write, 8, KP);
-            LowerParameterOperation(LC_read_write, 12, KI);
-            LowerParameterOperation(LC_read_write, 16, KD);
-            LowerParameterOperation(LC_read_write, 20, MPE);
-            LowerParameterOperation(LC_read_write, 24, MPC);
-            LowerParameterOperation(LC_read_write, 28, LA);
-            LowerParameterOperation(LC_read_write, 32, LB);
-            LowerParameterOperationInt(LC_read_write, 36, KMTT);
-            LowerParameterOperation(LC_read_write, 40, ZOFS);
-        }
-    }
+    LowerParameterOperation(LC_read_write, 8, KP);
+    LowerParameterOperation(LC_read_write, 12, KI);
+    LowerParameterOperation(LC_read_write, 16, KD);
+    LowerParameterOperation(LC_read_write, 20, MPE);
+    LowerParameterOperation(LC_read_write, 24, MPC);
+    LowerParameterOperation(LC_read_write, 28, LA);
+    LowerParameterOperation(LC_read_write, 32, LB);
+    LowerParameterOperationInt(LC_read_write, 36, KMTT);
+    LowerParameterOperation(LC_read_write, 40, ZOFS);
 
-    Old_reset = LC_read_write;
+    ReadData.KP = KP;
+    ReadData.KI = KI;
+    ReadData.KD = KD;
+    ReadData.MPE = MPE;
+    ReadData.MPC = MPC;
+    ReadData.LA = LA;
+    ReadData.LB = LB;
+    ReadData.KMTT = KMTT;
+    ReadData.IMU_Z = ZOFS;
 }
 
 /**********************************************************************
@@ -1573,7 +1148,7 @@ void TrolleyControl::ParamDataRead(uint8_t *data)
         else
         {
 
-            LowerParameterOperation("read", 0, 0);
+            TdParamsRead();
         }
     }
     catch (const std::exception &e)
