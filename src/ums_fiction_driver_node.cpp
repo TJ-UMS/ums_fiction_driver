@@ -22,67 +22,525 @@
 
 using namespace std::chrono_literals;
 
-
-
-//CRC高位字节值表
+// CRC高位字节值表
 const uint8_t auchCRCHi[] = {
-        0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
-        0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
-        0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
-        0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
-        0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
-        0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41,
-        0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
-        0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
-        0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
-        0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40,
-        0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
-        0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
-        0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
-        0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40,
-        0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
-        0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
-        0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
-        0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
-        0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
-        0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
-        0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
-        0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40,
-        0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
-        0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
-        0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
-        0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
-} ;
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x01,
+    0xC0,
+    0x80,
+    0x41,
+    0x00,
+    0xC1,
+    0x81,
+    0x40,
+};
 
 // CRC低位字节值表
-const  uint8_t auchCRCLo[] = {
-        0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06,
-        0x07, 0xC7, 0x05, 0xC5, 0xC4, 0x04, 0xCC, 0x0C, 0x0D, 0xCD,
-        0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B, 0xC9, 0x09,
-        0x08, 0xC8, 0xD8, 0x18, 0x19, 0xD9, 0x1B, 0xDB, 0xDA, 0x1A,
-        0x1E, 0xDE, 0xDF, 0x1F, 0xDD, 0x1D, 0x1C, 0xDC, 0x14, 0xD4,
-        0xD5, 0x15, 0xD7, 0x17, 0x16, 0xD6, 0xD2, 0x12, 0x13, 0xD3,
-        0x11, 0xD1, 0xD0, 0x10, 0xF0, 0x30, 0x31, 0xF1, 0x33, 0xF3,
-        0xF2, 0x32, 0x36, 0xF6, 0xF7, 0x37, 0xF5, 0x35, 0x34, 0xF4,
-        0x3C, 0xFC, 0xFD, 0x3D, 0xFF, 0x3F, 0x3E, 0xFE, 0xFA, 0x3A,
-        0x3B, 0xFB, 0x39, 0xF9, 0xF8, 0x38, 0x28, 0xE8, 0xE9, 0x29,
-        0xEB, 0x2B, 0x2A, 0xEA, 0xEE, 0x2E, 0x2F, 0xEF, 0x2D, 0xED,
-        0xEC, 0x2C, 0xE4, 0x24, 0x25, 0xE5, 0x27, 0xE7, 0xE6, 0x26,
-        0x22, 0xE2, 0xE3, 0x23, 0xE1, 0x21, 0x20, 0xE0, 0xA0, 0x60,
-        0x61, 0xA1, 0x63, 0xA3, 0xA2, 0x62, 0x66, 0xA6, 0xA7, 0x67,
-        0xA5, 0x65, 0x64, 0xA4, 0x6C, 0xAC, 0xAD, 0x6D, 0xAF, 0x6F,
-        0x6E, 0xAE, 0xAA, 0x6A, 0x6B, 0xAB, 0x69, 0xA9, 0xA8, 0x68,
-        0x78, 0xB8, 0xB9, 0x79, 0xBB, 0x7B, 0x7A, 0xBA, 0xBE, 0x7E,
-        0x7F, 0xBF, 0x7D, 0xBD, 0xBC, 0x7C, 0xB4, 0x74, 0x75, 0xB5,
-        0x77, 0xB7, 0xB6, 0x76, 0x72, 0xB2, 0xB3, 0x73, 0xB1, 0x71,
-        0x70, 0xB0, 0x50, 0x90, 0x91, 0x51, 0x93, 0x53, 0x52, 0x92,
-        0x96, 0x56, 0x57, 0x97, 0x55, 0x95, 0x94, 0x54, 0x9C, 0x5C,
-        0x5D, 0x9D, 0x5F, 0x9F, 0x9E, 0x5E, 0x5A, 0x9A, 0x9B, 0x5B,
-        0x99, 0x59, 0x58, 0x98, 0x88, 0x48, 0x49, 0x89, 0x4B, 0x8B,
-        0x8A, 0x4A, 0x4E, 0x8E, 0x8F, 0x4F, 0x8D, 0x4D, 0x4C, 0x8C,
-        0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42,
-        0x43, 0x83, 0x41, 0x81, 0x80, 0x40,
-} ;
+const uint8_t auchCRCLo[] = {
+    0x00,
+    0xC0,
+    0xC1,
+    0x01,
+    0xC3,
+    0x03,
+    0x02,
+    0xC2,
+    0xC6,
+    0x06,
+    0x07,
+    0xC7,
+    0x05,
+    0xC5,
+    0xC4,
+    0x04,
+    0xCC,
+    0x0C,
+    0x0D,
+    0xCD,
+    0x0F,
+    0xCF,
+    0xCE,
+    0x0E,
+    0x0A,
+    0xCA,
+    0xCB,
+    0x0B,
+    0xC9,
+    0x09,
+    0x08,
+    0xC8,
+    0xD8,
+    0x18,
+    0x19,
+    0xD9,
+    0x1B,
+    0xDB,
+    0xDA,
+    0x1A,
+    0x1E,
+    0xDE,
+    0xDF,
+    0x1F,
+    0xDD,
+    0x1D,
+    0x1C,
+    0xDC,
+    0x14,
+    0xD4,
+    0xD5,
+    0x15,
+    0xD7,
+    0x17,
+    0x16,
+    0xD6,
+    0xD2,
+    0x12,
+    0x13,
+    0xD3,
+    0x11,
+    0xD1,
+    0xD0,
+    0x10,
+    0xF0,
+    0x30,
+    0x31,
+    0xF1,
+    0x33,
+    0xF3,
+    0xF2,
+    0x32,
+    0x36,
+    0xF6,
+    0xF7,
+    0x37,
+    0xF5,
+    0x35,
+    0x34,
+    0xF4,
+    0x3C,
+    0xFC,
+    0xFD,
+    0x3D,
+    0xFF,
+    0x3F,
+    0x3E,
+    0xFE,
+    0xFA,
+    0x3A,
+    0x3B,
+    0xFB,
+    0x39,
+    0xF9,
+    0xF8,
+    0x38,
+    0x28,
+    0xE8,
+    0xE9,
+    0x29,
+    0xEB,
+    0x2B,
+    0x2A,
+    0xEA,
+    0xEE,
+    0x2E,
+    0x2F,
+    0xEF,
+    0x2D,
+    0xED,
+    0xEC,
+    0x2C,
+    0xE4,
+    0x24,
+    0x25,
+    0xE5,
+    0x27,
+    0xE7,
+    0xE6,
+    0x26,
+    0x22,
+    0xE2,
+    0xE3,
+    0x23,
+    0xE1,
+    0x21,
+    0x20,
+    0xE0,
+    0xA0,
+    0x60,
+    0x61,
+    0xA1,
+    0x63,
+    0xA3,
+    0xA2,
+    0x62,
+    0x66,
+    0xA6,
+    0xA7,
+    0x67,
+    0xA5,
+    0x65,
+    0x64,
+    0xA4,
+    0x6C,
+    0xAC,
+    0xAD,
+    0x6D,
+    0xAF,
+    0x6F,
+    0x6E,
+    0xAE,
+    0xAA,
+    0x6A,
+    0x6B,
+    0xAB,
+    0x69,
+    0xA9,
+    0xA8,
+    0x68,
+    0x78,
+    0xB8,
+    0xB9,
+    0x79,
+    0xBB,
+    0x7B,
+    0x7A,
+    0xBA,
+    0xBE,
+    0x7E,
+    0x7F,
+    0xBF,
+    0x7D,
+    0xBD,
+    0xBC,
+    0x7C,
+    0xB4,
+    0x74,
+    0x75,
+    0xB5,
+    0x77,
+    0xB7,
+    0xB6,
+    0x76,
+    0x72,
+    0xB2,
+    0xB3,
+    0x73,
+    0xB1,
+    0x71,
+    0x70,
+    0xB0,
+    0x50,
+    0x90,
+    0x91,
+    0x51,
+    0x93,
+    0x53,
+    0x52,
+    0x92,
+    0x96,
+    0x56,
+    0x57,
+    0x97,
+    0x55,
+    0x95,
+    0x94,
+    0x54,
+    0x9C,
+    0x5C,
+    0x5D,
+    0x9D,
+    0x5F,
+    0x9F,
+    0x9E,
+    0x5E,
+    0x5A,
+    0x9A,
+    0x9B,
+    0x5B,
+    0x99,
+    0x59,
+    0x58,
+    0x98,
+    0x88,
+    0x48,
+    0x49,
+    0x89,
+    0x4B,
+    0x8B,
+    0x8A,
+    0x4A,
+    0x4E,
+    0x8E,
+    0x8F,
+    0x4F,
+    0x8D,
+    0x4D,
+    0x4C,
+    0x8C,
+    0x44,
+    0x84,
+    0x85,
+    0x45,
+    0x87,
+    0x47,
+    0x46,
+    0x86,
+    0x82,
+    0x42,
+    0x43,
+    0x83,
+    0x41,
+    0x81,
+    0x80,
+    0x40,
+};
 
 class TrolleyControl : public rclcpp::Node
 {
@@ -142,18 +600,18 @@ public:
         Thread = std::thread(&TrolleyControl::DataProcessingThread, this);
 
         /*声明参数*/
-        this->declare_parameter<std::string>("LC_read_write", "read");                                       // 读或写
-        this->declare_parameter<int32_t>("SYS_CONTROL", 0);                                // 系统控制指令
-        this->declare_parameter<int32_t>("SYS_STATUS", 0);                                   // 系统运行状态
-        this->declare_parameter<float>("KP", 0);              // 速度闭环控制器 比例增益
-        this->declare_parameter<float>("KI", 0);                  // 速度闭环控制器 积分增益
-        this->declare_parameter<float>("KD", 0);              // 速度闭环控制器 微分增益
-        this->declare_parameter<float>("MPE", 0);                         // 速度测算 脉冲周数比
-        this->declare_parameter<float>("MPC", 0);               // 速度测算 轮圆周长 单位：m
-        this->declare_parameter<float>("LA", 0);                         // 底盘尺寸 轮间距/2 单位：m
-        this->declare_parameter<float>("LB", 0);                          // 底盘尺寸 轴间距/2 单位：m
-        this->declare_parameter<int32_t>("KMTT", 0);                                      // 运动学模型类型
-        this->declare_parameter<float>("IMU_Z", 0.0); // IMU Z 轴 航向角零偏修正偏置值
+        this->declare_parameter<std::string>("LC_read_write", "read"); // 读或写
+        this->declare_parameter<int32_t>("SYS_CONTROL", 0);            // 系统控制指令
+        this->declare_parameter<int32_t>("SYS_STATUS", 0);             // 系统运行状态
+        this->declare_parameter<float>("KP", 0);                       // 速度闭环控制器 比例增益
+        this->declare_parameter<float>("KI", 0);                       // 速度闭环控制器 积分增益
+        this->declare_parameter<float>("KD", 0);                       // 速度闭环控制器 微分增益
+        this->declare_parameter<float>("MPE", 0);                      // 速度测算 脉冲周数比
+        this->declare_parameter<float>("MPC", 0);                      // 速度测算 轮圆周长 单位：m
+        this->declare_parameter<float>("LA", 0);                       // 底盘尺寸 轮间距/2 单位：m
+        this->declare_parameter<float>("LB", 0);                       // 底盘尺寸 轴间距/2 单位：m
+        this->declare_parameter<int32_t>("KMTT", 0);                   // 运动学模型类型
+        this->declare_parameter<float>("IMU_Z", 0.0);                  // IMU Z 轴 航向角零偏修正偏置值
     }
 
     ~TrolleyControl()
@@ -208,8 +666,6 @@ private:
 
     void TdParamsRead();
 
-
-
     double CarSpeed;
     double CarAngle;
     std::string MagneticSensorData;
@@ -223,7 +679,6 @@ private:
     int8_t Collision_Count = 0;
     std::vector<uint8_t> Send_data;
     std::string Old_reset;
-
 
     bool initRead = false;
 
@@ -275,7 +730,7 @@ void TrolleyControl::IoCallback(std_msgs::msg::String::SharedPtr io_msg)
         Control_io[1] = {0x03};
         RCLCPP_INFO(this->get_logger(), "开启12v输出。");
     }
- else if (io_msg->data == "0")
+    else if (io_msg->data == "0")
     {
         Control_io[1] = {0x00};
         RCLCPP_INFO(this->get_logger(), "关闭12v输出。");
@@ -336,12 +791,9 @@ void TrolleyControl::MotorSpeedPositionControl(uint8_t id, double velocitypower)
 入口参数：无
 返回  值：无
 **********************************************************************/
-void TrolleyControl::TdParamsRead(){
-    sleep(5);
+void TrolleyControl::TdParamsRead()
+{
     LowerParameterOperation("read", 0, 0);
-
-    std::exit(0);
-
 }
 /**********************************************************************
 函数功能：主回调
@@ -351,7 +803,6 @@ void TrolleyControl::TdParamsRead(){
 void TrolleyControl::CarPubCallBack()
 {
     ParameterService();
-    LowerParameterOperation("read", 0, 0);
 
     std::vector<uint8_t> SendHexData;
     std::vector<uint8_t> LeftWheelSpeed = DoubleToBytes(CarSpeed);
@@ -423,12 +874,10 @@ void TrolleyControl::ParameterService()
         if (LC_read_write == "read")
         {
             LowerParameterOperation("read", 0, 0);
-            LowerParameterOperation("read", 0, 0);
-
         }
         else if (LC_read_write == "write")
         {
-//            LowerParameterOperation(LC_read_write, 0, LC_System_operating_status);
+            //            LowerParameterOperation(LC_read_write, 0, LC_System_operating_status);
             LowerParameterOperation(LC_read_write, 8, KP);
             LowerParameterOperation(LC_read_write, 12, KI);
             LowerParameterOperation(LC_read_write, 16, KD);
@@ -505,11 +954,6 @@ void TrolleyControl::LowerParameterOperation(std::string red_write, uint8_t addr
 
         read = DataDelivery(0x52, read);
         Sp.write(read);
-        //  for (const auto &element : read)
-        // {
-        //     std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(element) << " ";
-        // }
-        // std::cout << std::dec << std::endl;
     }
     else if (red_write == "write")
     {
@@ -639,7 +1083,7 @@ void TrolleyControl::ImuDataProcess()
     message.orientation.z = q.getZ();
     message.orientation.w = q.getW();
 
-//    std::cout << "roll:" << ImuStructural.roll << " pitch:" << ImuStructural.pitch << " yaw:" << ImuStructural.yaw << std::endl;
+    //    std::cout << "roll:" << ImuStructural.roll << " pitch:" << ImuStructural.pitch << " yaw:" << ImuStructural.yaw << std::endl;
 
     ImuPublisher->publish(message);
 
@@ -800,30 +1244,29 @@ std::vector<uint8_t> TrolleyControl::DoubleToBytes(double value)
 }
 
 //=========================================
-//CRC函数程序
-//功能:CRC校验
+// CRC函数程序
+// 功能:CRC校验
 //==========================================
 
 uint16_t TrolleyControl::CalCRC16(const std::vector<uint8_t> &data)
 {
-    unsigned char uchCRCHi = 0xFF ;                     // 高CRC字节初始化
-    unsigned char uchCRCLo = 0xFF ;                     //低CRC 字节初始化
-    unsigned char uIndex ;                              // CRC循环中的索引
+    unsigned char uchCRCHi = 0xFF; // 高CRC字节初始化
+    unsigned char uchCRCLo = 0xFF; // 低CRC 字节初始化
+    unsigned char uIndex;          // CRC循环中的索引
 
     for (auto byte : data)
     {
 
-        uIndex = uchCRCHi ^ byte ;            			// 计算CRC
+        uIndex = uchCRCHi ^ byte; // 计算CRC
         uchCRCHi = uchCRCLo ^ auchCRCHi[uIndex];
         uchCRCLo = auchCRCLo[uIndex];
-
     }
     return (uchCRCHi << 8 | uchCRCLo);
 }
 /**********************************************************************
 函数功能：计算给定数据的 CRC-16 校验和。
 入口参数：需要计算 CRC-16 的输入数据。
-返回  值：CRC-16 校验和值。
+返回  值：CRC-16 校验和值。  已弃用
 **********************************************************************/
 uint16_t TrolleyControl::Crc16(const std::vector<uint8_t> &data)
 {
@@ -874,7 +1317,6 @@ std::vector<uint8_t> TrolleyControl::DataDelivery(uint8_t signbit, std::vector<u
     uint16_t result = CalCRC16(Send_data);
     ResultBytes.push_back(result >> 8);
     ResultBytes.push_back(result & 0xFF);
-
 
     Send_data.insert(Send_data.end(), ResultBytes.begin(), ResultBytes.end());
 
@@ -979,7 +1421,7 @@ bool TrolleyControl::DataCheck(std::vector<uint8_t> &data)
 
     if (data.size() >= 7)
     {
-//        printf("1 if");
+        //        printf("1 if");
         extractedData.assign(data.begin() + 2, data.end() - 3);
     }
     else
@@ -992,25 +1434,14 @@ bool TrolleyControl::DataCheck(std::vector<uint8_t> &data)
     uint16_t result_l = (result & 0xFF);
     uint16_t result_h = (result >> 8);
 
-
     if (result_h == data[data.size() - 3] && result_l == data[data.size() - 2])
     {
-//    {   printf("2 if");
+        //    {   printf("2 if");
 
         return 1;
     }
     else
-    {   if(data[2] ==0x42){
-//            printf("\n");
-//            printf("\n");
-//            printf("%04x \n" ,result);
-//            printf("%02x%02x\n",data[data.size() - 3],data[data.size() - 2]);
-//
-//            for (auto byte:data) {
-//                printf("%02x ",byte);
-//            }
-//            printf("\n");
-    }
+    {
 
         return 0;
     }
@@ -1054,83 +1485,102 @@ float TrolleyControl::HexArrayToFloat32(uint8_t *hexArray, size_t size)
 void TrolleyControl::ParamDataRead(uint8_t *data)
 {
     uint8_t msg_len = data[3];
-    try{
+    try
+    {
         uint8_t *p = data + 4;
-        if(msg_len == 44){
-            for(int index = 0;index <= msg_len;index=index+4){
-                int32_t intValue = HexArrayToInt32(p+index, 4);
-                float floatValue = HexArrayToFloat32(p+index, 4);
+        if (msg_len == 44)
+        {
+            for (int index = 0; index <= msg_len; index = index + 4)
+            {
+                int32_t intValue = HexArrayToInt32(p + index, 4);
+                float floatValue = HexArrayToFloat32(p + index, 4);
 
-                switch (index) {
-                    case 0:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("SYS_CONTROL", intValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }
-                    case 4:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("SYS_STATUS", intValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }
-                    case 8:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("KP", floatValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }case 12:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("KI", floatValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }case 16:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("KD", floatValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }case 20:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("MPE", floatValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }
-                    case 24:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("MPC", floatValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }
-                    case 28:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("LA", floatValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }
-                    case 32:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("LB", floatValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }
-                    case 36:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("KMTT", intValue)};
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }
-                    case 40:{
-                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("IMU_Z", floatValue)};
-//                        printf("imu: %f",floatValue);
-                        this->set_parameters(all_new_parameters);
-                        break;
-                    }
-                    default:
-//                        printf("Read Err ,%d",index);
-                        break;
+                switch (index)
+                {
+                case 0:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("SYS_CONTROL", intValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 4:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("SYS_STATUS", intValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 8:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("KP", floatValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 12:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("KI", floatValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 16:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("KD", floatValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 20:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("MPE", floatValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 24:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("MPC", floatValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 28:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("LA", floatValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 32:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("LB", floatValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 36:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("KMTT", intValue)};
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                case 40:
+                {
+                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("IMU_Z", floatValue)};
+                    //                        printf("imu: %f",floatValue);
+                    this->set_parameters(all_new_parameters);
+                    break;
+                }
+                default:
+                    //
+                    break;
                 }
             }
-        } else{
-//            printf("err");
+        }
+        else
+        {
+
             LowerParameterOperation("read", 0, 0);
         }
-    }catch (const std::exception &e)
-    {
-         printf("err");
-         std::cerr << e.what() << '\n';
     }
-
-
+    catch (const std::exception &e)
+    {
+        printf("err");
+        std::cerr << e.what() << '\n';
+    }
 }
 /**********************************************************************
 函数功能：多线程数据接收处理
@@ -1140,7 +1590,7 @@ void TrolleyControl::ParamDataRead(uint8_t *data)
 void TrolleyControl::DataProcessingThread()
 {
     int all_data = 0;
-    int pass_data= 0;
+    int pass_data = 0;
     int err_data = 0;
     while (true)
     {
@@ -1154,9 +1604,10 @@ void TrolleyControl::DataProcessingThread()
             NativeData = buffer;
             EscapeVector(NativeData);
             bool DataCheck_bit = DataCheck(NativeData);
-                all_data++;
+            all_data++;
             if (DataCheck_bit)
-            {   pass_data++;
+            {
+                pass_data++;
 
                 try
                 {
@@ -1167,7 +1618,7 @@ void TrolleyControl::DataProcessingThread()
                         break;
                     case 0x42: // 参数读取操作返回内容
                     {
-//                        RCLCPP_INFO(this->get_logger(), "开启params");
+                        //                        RCLCPP_INFO(this->get_logger(), "开启params");
                         ParamDataRead(&NativeData[0]);
 
                         break;
@@ -1214,15 +1665,10 @@ void TrolleyControl::DataProcessingThread()
                 {
                     // std::cerr << e.what() << '\n';
                 }
-            } else{
+            }
+            else
+            {
                 err_data++;
-
-                printf("all %d, pass %d ,error %d ,per: %2.2f \n",all_data,pass_data,err_data,((float)err_data/(float)all_data)*100.0);
-//                 for (const auto &element : NativeData)
-//                 {
-//                     std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(element) << " ";
-//                 }
-//                 std::cout << std::dec << std::endl;
             }
         }
 
