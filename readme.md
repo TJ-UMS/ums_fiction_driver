@@ -1,13 +1,37 @@
-*声明参数*
-this->declare_parameter<std::string>("LC_read_write", "read");                                          //读或写
-this->declare_parameter<int32_t>("LC_Motion_control_instruction", 0);                                   //系统控制指令
-this->declare_parameter<int32_t>("LC_System_operating_status", 0);                                      //系统运行状态
-this->declare_parameter<float>("LC_Speed_closed_loop_controller_proportional_gain", 0);                 //速度闭环控制器 比例增益
-this->declare_parameter<float>("LC_Speed_closed_loop_controller_integral_gain", 0);                     //速度闭环控制器 积分增益
-this->declare_parameter<float>("LC_Speed_closed_loop_controller_differential_gain", 0);                 //速度闭环控制器 微分增益
-this->declare_parameter<float>("LC_Speed_measurement_pulse_cycle_ratio", 0);                            //速度测算 脉冲周数比
-this->declare_parameter<float>("LC_Speed_measures_the_circumference_of_the_wheel", 0);                  //速度测算 轮圆周长 单位：m
-this->declare_parameter<float>("LC_Chassis_dimensions_Wheel_spacing_/2", 0);                            //底盘尺寸 轮间距/2 单位：m
-this->declare_parameter<float>("LC_Chassis_dimensions_Axle_spacing_/2", 0);                             //底盘尺寸 轴间距/2 单位：m
-this->declare_parameter<int32_t>("LC_Kinematic_model_type", 0);                                         //运动学模型类型
-this->declare_parameter<float>("LC_IMU_Z-axis_course_Angle_zero_offset_correction_bias_value", 0.0);      //IMU Z 轴 航向角零偏修正偏置值
+##  通用控制板驱动 
+
+### fiction.yaml 标准控制板
+
+#### 参数说明
+## 参数说明
+
+| 参数名 | 说明 | 单位 | 默认值 |
+|---|---|---|---|
+| baudrate | 波特率 | bps | 2000000 |
+| port | 端口号 | - | /dev/ttyUSB0 |
+| IMU_Z | IMU Z 轴校准值  | s/rad | -0.154333333671093 |
+| KD | 速度环 D 增益 | - | 0.20000000298023224 |
+| KI | 速度环 I 增益 | - | 0.6000000238418579 |
+| KMTT | 运动学模型 | - | 3 |
+| KP | 速度环 P 增益 | - | 1.7999999523162842 |
+| LA | 底盘尺寸 轮间距/2 | m | 0.13500000536441803 |
+| LB | 底盘尺寸 轴间距/2 | m | 0.10000000149011612 |
+| LC_read_write | 读写模式 read不覆盖原始参数 write使用yaml覆盖原始参数 | - | write |
+| MPC | 速度测算 轮圆周长 | m | 0.2042035162448883 |
+| MPE | 速度测算 脉冲周数 | - | 60000.0 |
+
+## 运动学 KMTT参数说明
+| 运动学模型类型 | 宏定义 |
+|---|---|
+| 直接功率控制模式 BDC | `KMT MOD MOT POW 0` |
+| 直接速度控制模式 BDC | `KMT MOD MOT SPD 1` |
+| 四轮麦克纳姆轮 4x45deg BDC | `KMT MOD MCN_445 2` |
+| 两后驱阿克曼底盘 BDC | `_AKM_2D 3` |
+| 两轮差速底盘 BDC | `KMT MOD DIF_DDF 4` |
+| 两轮差速底盘中菱轮毂电机8015控制器 | `KMT MOD DIF Z5K 5` |
+| 四轮差速底盘 BDC | `KMT_MOD_DIF_QDF 6` |
+
+## 启动
+```
+ros2 launch ums_fiction_driver ums_fiction_v1.launch.py
+```
