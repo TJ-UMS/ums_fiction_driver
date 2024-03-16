@@ -7,10 +7,13 @@ struct ParamsData
     float KP;
     float KI;
     float KD;
+    float MPE;
+    float MPC;
     float LA;
     float LB;
     int32_t KMTT;
     float IMU_Z;
+    
 };
 
 #endif

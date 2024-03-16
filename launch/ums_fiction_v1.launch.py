@@ -25,7 +25,7 @@ def generate_launch_description():
                        executable='ums_fiction_driver_node',
                        name=node_name,
                        output='screen',
-                       emulate_tty=True,
+                    #    emulate_tty=True,
                        parameters=[parameter_file],
                        namespace='/',
                        )
