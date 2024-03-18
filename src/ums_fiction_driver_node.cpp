@@ -1132,7 +1132,7 @@ void TrolleyControl::RemoteDataProcessing(std::vector<uint8_t> &byteVector)
                 // RCLCPP_INFO(this->get_logger(),("遥控数据处理"+std::to_string(jj)+"通道:"+std::to_string(result)).c_str());
             }
         }
-        pub_joy->publish(*joy_msg);
+        pubJoy->publish(*joy_msg);
     }
     catch (const std::exception &e)
     {
