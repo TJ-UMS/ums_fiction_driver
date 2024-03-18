@@ -11,6 +11,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/int8.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "tf2/LinearMath/Quaternion.h"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -28,62 +29,15 @@ class TrolleyControl : public rclcpp::Node
 {
 private:
 public:
+    std::shared_ptr<serial::Serial> Sp;
     TrolleyControl(/* args */) : Node("ums_fiction_driver_node")
     {
-        int baudrate = 0;
-        std::string serialPort;
-
-        this->declare_parameter<int>("baudrate");
-        this->declare_parameter<std::string>("port");
-
-        this->get_parameter<std::string>("port", serialPort);
-        this->get_parameter<int>("baudrate", baudrate);
-
-        pub_joy = this->create_publisher<sensor_msgs::msg::Joy>("joy", 10);
-        CarPub = this->create_publisher<std_msgs::msg::String>("car", 1);
-        RfidPub = this->create_publisher<std_msgs::msg::String>("rfid_ori_data", 1);
-        MagnetSensorPub = this->create_publisher<std_msgs::msg::String>("magnet_data", rclcpp::SensorDataQoS());
-        OdomPublisher = this->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
-        TwistSub = this->create_subscription<geometry_msgs::msg::Twist>("cmd_vel", 1, std::bind(&TrolleyControl::VelCallback, this, std::placeholders::_1));
-        IoOut = this->create_subscription<std_msgs::msg::String>("IO", 1, std::bind(&TrolleyControl::IoCallback, this, std::placeholders::_1));
-        MotorPowerControlSub = this->create_subscription<std_msgs::msg::String>("motor_power_control", 1, std::bind(&TrolleyControl::MotorPowerCallback, this, std::placeholders::_1));
-        ImuPublisher = this->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
-        PowerInformation = this->create_publisher<std_msgs::msg::String>("PowerInformationData", 1);
-        Timer = this->create_wall_timer(5ms, std::bind(&TrolleyControl::CarPubCallBack, this));
-        serial::Timeout to = serial::Timeout::simpleTimeout(100);
-        Sp.setPort(serialPort);
-        Sp.setBaudrate(baudrate);
-        Sp.setTimeout(to);
-
-        try
-        {
-            Sp.open();
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << e.what() << '\n';
-            return;
-        }
-        if (Sp.isOpen())
-        {
-            std::cout << "底层串口打开成功" << std::endl;
-        }
-        else
-        {
-            return;
-        }
-
-        // 初始化里程计数据
-        current_time_ = this->now();
-        last_time_ = this->now();
-        x_ = 0.0;
-        y_ = 0.0;
-        theta_ = 0.0;
- 
-
-        Thread = std::thread(&TrolleyControl::DataProcessingThread, this);
 
         /*声明参数*/
+        this->declare_parameter<int>("baudrate");
+        this->declare_parameter<std::string>("port");
+        this->get_parameter<std::string>("port", serialPort);          // 端口号
+        this->get_parameter<int>("baudrate", baudrate);                // 波特率
         this->declare_parameter<std::string>("LC_read_write", "read"); // 读或写
         this->declare_parameter<int32_t>("SYS_CONTROL", 0);            // 系统控制指令
         this->declare_parameter<int32_t>("SYS_STATUS", 0);             // 系统运行状态
@@ -96,19 +50,30 @@ public:
         this->declare_parameter<float>("LB", 0);                       // 底盘尺寸 轴间距/2 单位：m
         this->declare_parameter<int32_t>("KMTT", 0);                   // 运动学模型类型
         this->declare_parameter<float>("IMU_Z", 0.0);                  // IMU Z 轴 航向角零偏修正偏置值
+        this->declare_parameter<bool>("encodeRfid", false);            // 是否 发送编码后rfid 默认false
+        this->get_parameter<bool>("encodeRfid", sendEncodeRfid);
         // 添加参数监听器
         parameter_event_subscriber_ = this->create_subscription<rcl_interfaces::msg::ParameterEvent>(
-                "/parameter_events", 10, std::bind(&TrolleyControl::parameter_callback, this, std::placeholders::_1));
-    }
+            "/parameter_events", 10, std::bind(&TrolleyControl::parameterCallback, this, std::placeholders::_1));
 
-    ~TrolleyControl()
-    {
-        Thread.join();
+        createPublish();
+        createSubscription();
+
+        Timer = this->create_wall_timer(5ms, std::bind(&TrolleyControl::CarPubCallBack, this));
+        // 初始化里程计数据
+        current_time_ = this->now();
+        last_time_ = this->now();
+        x_ = 0.0;
+        y_ = 0.0;
+        theta_ = 0.0;
+        // 初始化读取线程
+        spCreateThread = std::thread(&TrolleyControl::serialParamCallback, this);
+        spThread = std::thread(&TrolleyControl::DataProcessingThread, this);
     }
 
 private:
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr CarPub;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr RfidPub;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rfidDeCodePub;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr MagnetSensorPub;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr TwistSub;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr IoOut;
@@ -116,20 +81,23 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr ImuPublisher;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr OdomPublisher;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr PowerInformation;
-    rclcpp::Publisher<sensor_msgs::msg::Joy>::SharedPtr pub_joy;
     std::shared_ptr<tf2_ros::TransformBroadcaster> TfBroadcaster;
+    rclcpp::Publisher<sensor_msgs::msg::Joy>::SharedPtr pubJoy;
     rclcpp::TimerBase::SharedPtr Timer;
-    serial::Serial Sp;
-    std::thread Thread;
-
+    std::thread spThread;
+    std::thread spCreateThread;
     rclcpp::ParameterCallbackHandle callback_handle_;
     rclcpp::Subscription<rcl_interfaces::msg::ParameterEvent>::SharedPtr parameter_event_subscriber_;
-  
-    void parameter_callback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event);
+
+    void parameterCallback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event);
+    void createSubscription();
+    void createPublish();
+    void serialParamCallback();
+
+    std::shared_ptr<serial::Serial> createSerial(std::string *port, int *baudrate);
 
     void CarPubCallBack();
     void DataProcessingThread();
-    void DataProcessingThreadTwo();
     std::vector<uint8_t> DoubleToBytes(double value);
     uint16_t Crc16(const std::vector<uint8_t> &data);
     uint16_t CalCRC16(const std::vector<uint8_t> &data);
@@ -154,13 +122,12 @@ private:
     float HexArrayToFloat32(uint8_t *hexArray, size_t size);
     int32_t HexArrayToInt32(uint8_t *hexArray, size_t size);
     void ParamDataRead(uint8_t *data);
-    void RemoteDataProcessing(std::vector<uint8_t> &byteVector);
-
     void TdParamsRead();
+    void reStartSerialThread();
+    void RemoteDataProcessing(std::vector<uint8_t> &byteVector);
 
     double CarXSpeed;
     double CarYSpeed;
-
     double CarAngle;
     std::string MagneticSensorData;
     float UltrasonicSensorData;
@@ -174,35 +141,16 @@ private:
     std::vector<uint8_t> Send_data;
     std::string Old_reset;
 
-    bool initRead = false;
+    std::atomic<bool> initRead = false;
+    bool sendEncodeRfid = false;
+    std::atomic<bool> initSerial = false;
+    std::atomic<bool> stopFlag = false;
 
-
-    struct ImuInfo
-    {
-        double axaxis;
-        double ayaxis;
-        double azaxis;
-        double gxaxis;
-        double gyaxis;
-        double gzaxis;
-        double q0;
-        double q1;
-        double q2;
-        double q3;
-        double roll;
-        double yaw;
-        double pitch;
-    } ImuStructural;
-
-    enum ControlStatus {
-    EMERGENCY_STOP,   // 急停状态
-    PROGRAM_CONTROL,  // 程序控制状态
-    REMOTE_CONTROL    // 遥控控制状态
-    };
-
-    
+    ImuInfo ImuStructural;
     ParamsData ReadData;
-    ControlStatus currentStatus = REMOTE_CONTROL;  // 初始化为遥控控制状态
+    ControlStatus currentStatus = REMOTE_CONTROL; // 初始化为遥控控制状态
+    int baudrate = 0;
+    std::string serialPort;
 
     rclcpp::Time current_time_;
     rclcpp::Time last_time_;
@@ -211,14 +159,111 @@ private:
     double theta_;
 };
 
-void TrolleyControl::parameter_callback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
+void TrolleyControl::serialParamCallback()
+{
+    stopFlag = false;
+    try
+    {
+        auto serial_ = createSerial(&serialPort, &baudrate);
+        if (serial_ != nullptr)
+        {
+            Sp = serial_;
+        }
+    }
+    catch (const std::exception &e)
+    {
+        RCLCPP_ERROR(this->get_logger(), "Exception thrown: %s", e.what());
+    }
+}
+/**
+ * 重新启动串口
+ */
+void TrolleyControl::reStartSerialThread()
+{
+    stopFlag = true;
+    initSerial = false;
+    if (spCreateThread.joinable())
+    {
+        spCreateThread.join(); // 确保之前的线程已经完成
+    }
+    if (Sp != nullptr)
+    {
+        Sp->close();
+    }
+
+    spCreateThread = std::thread(&TrolleyControl::serialParamCallback, this);
+}
+std::shared_ptr<serial::Serial> TrolleyControl::createSerial(std::string *port, int *baudrate)
 {
 
+    while (!stopFlag)
+    {
+
+        try
+        {
+            auto sp = std::make_shared<serial::Serial>(*port, *baudrate, serial::Timeout::simpleTimeout(1000));
+            RCLCPP_INFO(this->get_logger(), "Serial port %s opened successfully", port->c_str());
+            initSerial = true;
+            return sp;
+        }
+        catch (const std::exception &e)
+        {
+            RCLCPP_ERROR(this->get_logger(), "Exception thrown: %s \n port: %s", e.what(), port->c_str());
+            sleep(3);
+        }
+    }
+    RCLCPP_ERROR(this->get_logger(), "serial thread shotdown \n port: %s", port->c_str());
+    return nullptr;
+}
+
+void TrolleyControl::createSubscription()
+{
+    pubJoy = this->create_publisher<sensor_msgs::msg::Joy>("joy", 10);
+    TwistSub = this->create_subscription<geometry_msgs::msg::Twist>("cmd_vel", 1, std::bind(&TrolleyControl::VelCallback, this, std::placeholders::_1));
+    IoOut = this->create_subscription<std_msgs::msg::String>("IO", 1, std::bind(&TrolleyControl::IoCallback, this, std::placeholders::_1));
+    MotorPowerControlSub = this->create_subscription<std_msgs::msg::String>("motor_power_control", 1, std::bind(&TrolleyControl::MotorPowerCallback, this, std::placeholders::_1));
+}
+void TrolleyControl::createPublish()
+{
+    ImuPublisher = this->create_publisher<sensor_msgs::msg::Imu>("imu", 1);
+    PowerInformation = this->create_publisher<std_msgs::msg::String>("PowerInformationData", 1);
+    RfidPub = this->create_publisher<std_msgs::msg::String>("rfid_ori_data", 1);
+    rfidDeCodePub = this->create_publisher<std_msgs::msg::String>("rfid_data", 1);
+    MagnetSensorPub = this->create_publisher<std_msgs::msg::String>("magnet_data", rclcpp::SensorDataQoS());
+    OdomPublisher = this->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
+}
+
+void TrolleyControl::parameterCallback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
+{
+    for (const auto &parameter : event->changed_parameters)
+    {
+        if (parameter.name == "baudrate" && parameter.value.integer_value != baudrate)
+        {
+
+            baudrate = parameter.value.integer_value;
+            RCLCPP_INFO(get_logger(), "Parameter 'baudrate' has been updated to: %ld", parameter.value.integer_value);
+            reStartSerialThread();
+        }
+        else if (parameter.name == "port" && parameter.value.string_value != serialPort)
+        {
+            stopFlag = true;
+
+            serialPort = parameter.value.string_value;
+            RCLCPP_INFO(get_logger(), "Parameter 'port' has been updated to: %s", parameter.value.string_value.c_str());
+            reStartSerialThread();
+        }
+        else if (parameter.name == "encodeRfid" && parameter.value.bool_value != sendEncodeRfid)
+        {
+            RCLCPP_INFO(get_logger(), "Parameter 'encodeRfid' has been updated ");
+            sendEncodeRfid = parameter.value.bool_value;
+        }
+    }
     if (initRead)
     {
         bool current_write = false;
-        for (const auto & parameter  : event->changed_parameters)
+        for (const auto &parameter : event->changed_parameters)
         {
+
             if (parameter.name == "KP" && parameter.value.double_value != ReadData.KP)
             {
                 RCLCPP_INFO(get_logger(), "Parameter 'KP' has been updated to: %f", parameter.value.double_value);
@@ -323,7 +368,7 @@ void TrolleyControl::IoCallback(std_msgs::msg::String::SharedPtr io_msg)
     }
 
     Control_io = DataDelivery(0x4f, Control_io);
-    Sp.write(Control_io);
+    Sp->write(Control_io);
     Control_io.clear();
 }
 
@@ -366,7 +411,7 @@ void TrolleyControl::MotorSpeedPositionControl(uint8_t id, double velocitypower)
     SpeedPositionControl.insert(SpeedPositionControl.end(), v_p.begin(), v_p.end());
 
     SpeedPositionControl = DataDelivery(0x50, SpeedPositionControl);
-    Sp.write(SpeedPositionControl);
+    Sp->write(SpeedPositionControl);
 
     SpeedPositionControl.clear();
     v_p.clear();
@@ -397,14 +442,14 @@ void TrolleyControl::CarPubCallBack()
     SendHexData.insert(SendHexData.end(), RightWheelSpeed.begin(), RightWheelSpeed.end());
     SendHexData.insert(SendHexData.end(), AngularVelocity.begin(), AngularVelocity.end());
 
-    if (Send_bit == true and currentStatus==PROGRAM_CONTROL)
+    if (Send_bit == true && initSerial && currentStatus == PROGRAM_CONTROL)
     {
         SendHexData = DataDelivery(0x4b, SendHexData);
-        Sp.write(SendHexData);
+        Sp->write(SendHexData);
         Send_bit = false;
     }
 
-    if (!initRead)
+    if (!initRead && initSerial)
     {
         // 首次启动YAML文件默认读取参数并写入下位
         ParameterService();
@@ -421,7 +466,7 @@ void TrolleyControl::CarPubCallBack()
 }
 
 /**********************************************************************
-函数功能：ros参数读写操作
+函数功能：ros参数初始化
 入口参数：无
 返回  值：无
 **********************************************************************/
@@ -485,7 +530,7 @@ void TrolleyControl::ParameterService()
 }
 
 /**********************************************************************
-函数功能：下位MKTT参数写操作
+函数功能：下位MKTT参数写操作 INT
 入口参数：red_write读取或写入  address写入的地址  data写入的数据
 返回  值：无
 **********************************************************************/
@@ -501,7 +546,7 @@ void TrolleyControl::LowerParameterOperationInt(std::string red_write, uint8_t a
     // 获取低字节
     uint8_t lowByte = address & 0xFF;
 
-    if (red_write == "write")
+    if (red_write == "write" && initSerial)
     {
         write_in.push_back(highByte);
         write_in.push_back(lowByte);
@@ -512,7 +557,7 @@ void TrolleyControl::LowerParameterOperationInt(std::string red_write, uint8_t a
         write_in.insert(write_in.end(), datTransformed_date.begin(), datTransformed_date.end());
         write_in = DataDelivery(0x57, write_in);
         byteVector.clear();
-        Sp.write(write_in);
+        Sp->write(write_in);
     }
     Send_data.clear();
     read.clear();
@@ -521,7 +566,7 @@ void TrolleyControl::LowerParameterOperationInt(std::string red_write, uint8_t a
 }
 
 /**********************************************************************
-函数功能：下位参数读写操作
+函数功能：下位参数读写操作 FLOAT
 入口参数：red_write读取或写入  address写入的地址  data写入的数据
 返回  值：无
 **********************************************************************/
@@ -544,7 +589,7 @@ void TrolleyControl::LowerParameterOperation(std::string red_write, uint8_t addr
         read.push_back(0x2C);
 
         read = DataDelivery(0x52, read);
-        Sp.write(read);
+        Sp->write(read);
     }
     else if (red_write == "write")
     {
@@ -557,7 +602,7 @@ void TrolleyControl::LowerParameterOperation(std::string red_write, uint8_t addr
         write_in.insert(write_in.end(), datTransformed_date.begin(), datTransformed_date.end());
         write_in = DataDelivery(0x57, write_in);
         byteVector.clear();
-        Sp.write(write_in);
+        Sp->write(write_in);
         // for (const auto &element : write_in)
         // {
         //     std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(element) << " ";
@@ -581,7 +626,7 @@ void TrolleyControl::ImuDataProcess()
 
     if (DataJudgment == true)
     {
-        RCLCPP_INFO(get_logger(), "串口打开正确！！！");
+        RCLCPP_INFO(get_logger(), "Data Trusted");
         DataJudgment = false;
     }
 
@@ -815,7 +860,6 @@ double TrolleyControl::BinaryToDouble(const std::vector<uint8_t> &byteData)
     return result;
 }
 
-
 /**********************************************************************
 函数功能：函数将 double 转换为 std::vector<uint8_t> 表示
 入口参数：double value
@@ -1038,6 +1082,64 @@ bool TrolleyControl::DataCheck(std::vector<uint8_t> &data)
         return 0;
     }
 }
+/*******************************************************
+函数功能：遥控数据处理
+入口参数：串口数据
+返回  值：无
+**********************************************************************/
+
+void TrolleyControl::RemoteDataProcessing(std::vector<uint8_t> &byteVector)
+{
+    // 手柄数据
+    auto joy_msg = std::make_shared<sensor_msgs::msg::Joy>();
+    joy_msg->header.frame_id = "joy";
+    joy_msg->header.stamp = this->now();
+    int msg_len = byteVector[3];
+    joy_msg->buttons.resize(8);
+    joy_msg->axes.resize(8);
+    try
+    {
+        // RCLCPP_INFO(this->get_logger(),("遥控数据长度"+std::to_string(msg_len)).c_str());
+        {
+            for (int index = 0; index < msg_len / 2; index = index + 2)
+            {
+                // 设置按钮参数  buttons  int32
+                // 设置行程采参数 axes    float32
+                //  joy_msg->axes[jj] = 0.0;
+                uint16_t result = (static_cast<uint16_t>(byteVector[index + 5]) << 8) | byteVector[index + 4];
+                joy_msg->axes[index / 2] = result;
+                switch (index / 2)
+                {
+                case 4:
+                {
+                    if (result <= 300)
+                    {
+                        currentStatus = EMERGENCY_STOP; // 切换到急停状态
+                    }
+                    else if (result > 300 and result <= 1000)
+                    {
+                        currentStatus = PROGRAM_CONTROL; // 切换到程序控制状态
+                    }
+                    else if (result > 1000)
+                    {
+                        currentStatus = REMOTE_CONTROL; // 切换到遥控控制状态
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
+                // RCLCPP_INFO(this->get_logger(),("遥控数据处理"+std::to_string(jj)+"通道:"+std::to_string(result)).c_str());
+            }
+        }
+        pub_joy->publish(*joy_msg);
+    }
+    catch (const std::exception &e)
+    {
+        printf("err");
+        std::cerr << e.what() << '\n';
+    }
+}
 
 // 将一组十六进制数组合成一个int32类型
 int32_t TrolleyControl::HexArrayToInt32(uint8_t *hexArray, size_t size)
@@ -1175,179 +1277,131 @@ void TrolleyControl::ParamDataRead(uint8_t *data)
     }
 }
 /**********************************************************************
-函数功能：遥控数据处理
-入口参数：串口数据
-返回  值：无
-**********************************************************************/
-
-void TrolleyControl::RemoteDataProcessing(std::vector<uint8_t> &byteVector)
-{
-    // 手柄数据
-    auto joy_msg = std::make_shared<sensor_msgs::msg::Joy>();
-    joy_msg->header.frame_id = "joy";
-    joy_msg->header.stamp = this->now();
-    int msg_len = byteVector[3];
-    joy_msg->buttons.resize(8);
-    joy_msg->axes.resize(8);
-    try
-    {
-        // RCLCPP_INFO(this->get_logger(),("遥控数据长度"+std::to_string(msg_len)).c_str());
-        {
-            for (int index = 0; index < msg_len/2; index = index + 2)
-            {   
-                //设置按钮参数  buttons  int32
-                //设置行程采参数 axes    float32
-                // joy_msg->axes[jj] = 0.0;
-                uint16_t result = (static_cast<uint16_t>(byteVector[index+5]) << 8) | byteVector[index+4];
-                joy_msg->axes[index/2] = result;
-                switch (index/2)
-                {
-                case 4:
-                {
-                    if (result<=300)
-                    {
-                        currentStatus = EMERGENCY_STOP;  // 切换到急停状态
-                    }
-                    else if (result>300 and result<=1000)
-                    {
-                        currentStatus = PROGRAM_CONTROL;  // 切换到程序控制状态
-                    }
-                    else if (result>1000)
-                    {
-                        currentStatus = REMOTE_CONTROL;  // 切换到遥控控制状态
-                    }
-                    break;
-                }
-                default:
-                    break;
-                }
-                // RCLCPP_INFO(this->get_logger(),("遥控数据处理"+std::to_string(jj)+"通道:"+std::to_string(result)).c_str());
-                
-            }
-        }
-    pub_joy->publish(*joy_msg);
-
-    }
-    catch (const std::exception &e)
-    {
-        printf("err");
-        std::cerr << e.what() << '\n';
-    }
-}
-/**********************************************************************
 函数功能：多线程数据接收处理
 入口参数：无
 返回  值：无
 **********************************************************************/
 void TrolleyControl::DataProcessingThread()
 {
-    int all_data = 0;
-    int pass_data = 0;
-    int err_data = 0;
-    while (true)
+    try
     {
-        std::string str;
-        size_t n = Sp.available();
-
-        if (n != 0)
+        int all_data = 0;
+        int pass_data = 0;
+        int err_data = 0;
+        while (true)
         {
-            str = Sp.readline();
-            std::vector<uint8_t> buffer(str.begin(), str.end());
-            NativeData = buffer;
-            EscapeVector(NativeData);
-            bool DataCheck_bit = DataCheck(NativeData);
-            all_data++;
-            if (DataCheck_bit)
+            if (initSerial && Sp != nullptr)
             {
-                pass_data++;
 
                 try
                 {
-                    switch (NativeData[2])
+                    std::string str;
+                    size_t n = Sp->available();
+                    if (n != 0)
                     {
-                    case 0x41: // 电源树 总线电流、5V 输出、输入电压、19V 输出。
-                        PowerData();
-                        break;
-                    case 0x42: // 参数读取操作返回内容
-                    {
-                        RCLCPP_INFO(this->get_logger(), "开启params");
-                        ParamDataRead(&NativeData[0]);
+                        str = Sp->readline();
+                        std::vector<uint8_t> buffer(str.begin(), str.end());
+                        NativeData = buffer;
+                        EscapeVector(NativeData);
+                        bool DataCheck_bit = DataCheck(NativeData);
 
-                        break;
-                    }
-
-                    case 0x45: // 磁条数据
-                        MagneticLineSensor();
-                        break;
-
-                    case 0x46: // 遥控数据
-                    {
-                        // RCLCPP_INFO(this->get_logger(),"遥控数据");
-                        RemoteDataProcessing(NativeData);
-                        break;
-                    }
-
-                    case 0x49: // 脉冲宽度调制信号
+                        if (DataCheck_bit)
                         {
-                        int data_size = NativeData[3];
-                            for (size_t i = 0; i < data_size; i++)
+                            pass_data++;
+
+                            try
                             {
-                                // RCLCPP_INFO(this->get_logger(),("脉冲宽度调制信号"+std::to_string(i+1)+"通道:"+std::to_string(NativeData[4+i])).c_str());
+                                switch (NativeData[2])
+                                {
+                                case 0x41: // 电源树 总线电流、5V 输出、输入电压、19V 输出。
+                                    PowerData();
+                                    break;
+                                case 0x42: // 参数读取操作返回内容
+                                {
+                                    ParamDataRead(&NativeData[0]);
+                                    break;
+                                }
+                                case 0x45: // 磁条数据
+                                    MagneticLineSensor();
+                                    break;
+                                case 0x51: // imu数据
+                                    ImuData = NativeData;
+                                    ImuDataProcess();
+                                    break;
+                                case 0x52: // rfid数据
+                                    Rfid(NativeData);
+                                    break;
+                                case 0x46: // 遥控数据
+                                {
+                                    // RCLCPP_INFO(this->get_logger(),"遥控数据");
+                                    RemoteDataProcessing(NativeData);
+                                    break;
+                                }
+                                case 0x4b: // 里程计
+                                {
+                                    OdometerData();
+                                }
+                                break;
+                                case 0x56: // 电机数据
 
+                                    break;
+                                case 0x57: // 电机控制数据
+
+                                    break;
+                                case 0x53: // 四个电机的相关数据
+
+                                    break;
+                                case 0x54: // 数字式温度传感器
+
+                                    break;
+                                case 0x55: // 超声数据
+                                    // 将位置 4 和 5 的数据组合成一个 16 位无符号整数
+                                    UltrasonicSensorData = static_cast<float>((NativeData[4] << 8) | NativeData[5]);
+                                    break;
+                                default:
+                                    // 处理默认情况
+                                    RCLCPP_INFO(this->get_logger(), ("未处理的协议标志位" + std::to_string(NativeData[2])).c_str());
+                                    break;
+                                }
                             }
-                            
-                        break;
+                            catch (const std::exception &e)
+                            {
+                                std::cerr << e.what() << '\n';
+                            }
+                            pass_data++;
                         }
-
-                    case 0x51: // imu数据
-                        ImuData = NativeData;
-                        ImuDataProcess();
-                        break;
-                    case 0x52: // rfid数据
-                        Rfid(NativeData);
-                        break;
-                    case 0x56: // 电机数据
-
-                        break;
-                    case 0x57: // 电机控制数据
-
-                        break;
-                    case 0x53: // 四个电机的相关数据
-
-                        break;
-                    case 0x54: // 数字式温度传感器
-
-                        break;
-                    case 0x55: // 超声数据
-                        // 将位置 4 和 5 的数据组合成一个 16 位无符号整数
-                        UltrasonicSensorData = static_cast<float>((NativeData[4] << 8) | NativeData[5]);
-                        break;
-                    case 0x4b: // 里程计
-                        OdometerData();
-                        break;
-
-                    default:
-                        // 处理默认情况
-                        
-                        RCLCPP_INFO(this->get_logger(),("未处理的协议标志位"+std::to_string(NativeData[2])).c_str());
-                        break;
-
+                        else
+                        {
+                            err_data++;
+                            printf("\n");
+                            printf("err: %d all: %d pass: %d \n", err_data, all_data, pass_data);
+                            printf("\n");
+                            for (auto data : NativeData)
+                            {
+                                printf("%02x", data);
+                            }
+                            printf("\n");
+                        }
+                        all_data++;
+                        // printf("err: %d all: %d pass: %d \n", err_data, all_data, pass_data);
                     }
+                    NativeData.clear();
+                    ImuData.clear();
+                    str.clear();
                 }
                 catch (const std::exception &e)
                 {
-                    // std::cerr << e.what() << '\n';
+                    printf("err");
+                    std::cerr << e.what() << '\n';
+                    reStartSerialThread();
                 }
             }
-            else
-            {
-                err_data++;
-            }
         }
-
-        NativeData.clear();
-        ImuData.clear();
-        str.clear();
+    }
+    catch (const std::exception &e)
+    {
+        printf("err");
+        std::cerr << e.what() << '\n';
     }
 }
 
@@ -1366,9 +1420,21 @@ void TrolleyControl::Rfid(std::vector<uint8_t> &byteVector)
     // 从 stringstream 中获取字符串
     std::string hexString = ss.str();
     msg.data = hexString;
-    if (hexString.size() == 46)
+    if (hexString.size() == 46 && !sendEncodeRfid)
     {
         RfidPub->publish(msg);
+    }
+    int rfid_d = -1;
+    if (hexString.substr(0, 8) == "0d3a5210")
+    {
+        std::string rfidHex = hexString.substr(8, 2);
+        rfid_d = hexToD(rfidHex);
+    }
+    if (rfid_d != -1 && rfid_d != 0 && sendEncodeRfid)
+    {
+        auto msg = std_msgs::msg::String();
+        msg.data = std::to_string(rfid_d);
+        rfidDeCodePub->publish(msg);
     }
 }
 
