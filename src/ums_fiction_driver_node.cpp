@@ -148,7 +148,7 @@ private:
 
     ImuInfo ImuStructural;
     ParamsData ReadData;
-    ControlStatus currentStatus = REMOTE_CONTROL; // 初始化为遥控控制状态
+    ControlStatus currentStatus = PROGRAM_CONTROL; // 初始化为程序控制状态
     int baudrate = 0;
     std::string serialPort;
 
@@ -1112,7 +1112,7 @@ void TrolleyControl::RemoteDataProcessing(std::vector<uint8_t> &byteVector)
                 {
                 case 4:
                 {
-                    if (result <= 300)
+                    if (result <= 300 && result != 0)
                     {
                         currentStatus = EMERGENCY_STOP; // 切换到急停状态
                     }
