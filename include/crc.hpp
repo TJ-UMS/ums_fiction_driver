@@ -1,8 +1,8 @@
-#include <cstdint>
-
 // 头文件 constant.h
 #ifndef CRC_H
 #define CRC_H
+#include <cstdint>
+#include <vector>
 
 // CRC高位字节值表
 const uint8_t auchCRCHi[] = {
@@ -524,5 +524,12 @@ const uint8_t auchCRCLo[] = {
     0x40,
 };
 
+/**
+ * 
+ * CRC函数程序
+ * 功能:CRC校验
+ * 
+*/
+uint16_t CalCRC16(const std::vector<uint8_t> &data);
 
 #endif // CONSTANT_H

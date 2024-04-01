@@ -1,15 +1,5 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.8)
 project(ums_fiction_driver)
-
-# Default to C99
-if(NOT CMAKE_C_STANDARD)
-  set(CMAKE_C_STANDARD 99)
-endif()
-
-# Default to C++14
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
-endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -26,42 +16,58 @@ find_package(tf2_ros REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # uncomment the line when a copyright and license is not present in all source files
-  #set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # uncomment the line when this package is not in a git repo
-  #set(ament_cmake_cpplint_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
-endif()
 
-
+# uncomment the following section in order to fill in
+# further dependencies manually.
+# find_package(<dependency> REQUIRED)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/src/serial)
 
-FILE(GLOB SDK_SRC
-  "src/serial/*.cc"
-  "src/serial/impl/unix.cc"
-  "src/serial/impl/list_ports/list_ports_linux.cc"
+
+# 指定共享库的位置
+# 检查目标CPU架构
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
+  # 如果为amd64
+  message(STATUS "Configuring for amd64")
+  link_directories(lib/x86)
+  set(UMS_SDK ${CMAKE_SOURCE_DIR}/lib/x86/libums_sdk.so)
+  set(SERIAL ${CMAKE_SOURCE_DIR}/lib/x86/libserial.so)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|ARM64|aarch64")
+  # 如果为arm64
+  message(STATUS "Configuring for arm64")
+  link_directories(lib/arm64)
+  set(UMS_SDK ${CMAKE_SOURCE_DIR}/lib/arm64/libums_sdk.so)
+  set(SERIAL ${CMAKE_SOURCE_DIR}/lib/arm64/libserial.so)
+else()
+  message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+# 其他CMake配置...
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+add_executable(ums_fiction_driver src/ums_fiction_driver_node.cpp)
+ament_target_dependencies(ums_fiction_driver rclcpp geometry_msgs sensor_msgs nav_msgs tf2 tf2_ros tf2_geometry_msgs)
+target_include_directories(ums_fiction_driver PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>)
+# 添加链接库
+target_link_libraries(ums_fiction_driver
+        ${UMS_SDK}
+        ${SERIAL}
 )
-
-add_library(serial STATIC ${SDK_SRC})
-
-
-add_executable(ums_fiction_driver_node src/ums_fiction_driver_node.cpp)
-
-target_link_libraries(ums_fiction_driver_node serial)
-
-ament_target_dependencies(ums_fiction_driver_node rclcpp std_msgs tf2_ros nav_msgs tf2_geometry_msgs geometry_msgs sensor_msgs tf2)
-
-install(TARGETS
-        ums_fiction_driver_node
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-install(DIRECTORY launch param script
-        DESTINATION share/${PROJECT_NAME})
+install(TARGETS ums_fiction_driver
+        DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS ${UMS_SDK} DESTINATION lib)
+install(PROGRAMS ${SERIAL} DESTINATION lib)
 
 ament_package()
