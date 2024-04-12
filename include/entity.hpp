@@ -19,6 +19,17 @@ struct ParamsData
     float MPC;
     int32_t KMTT;
     float IMU_Z;
+    // Overload the equality operator (==)
+    bool operator==(const ParamsData& other) const {
+        return (KP == other.KP && KI == other.KI && KD == other.KD &&
+                LA == other.LA && LB == other.LB && MPE == other.MPE &&
+                MPC == other.MPC && KMTT == other.KMTT && IMU_Z == other.IMU_Z);
+    }
+
+    // Overload the inequality operator (!=)
+    bool operator!=(const ParamsData& other) const {
+        return !(*this == other);  // Leverage already defined == operator
+    }
 };
 
 struct OdomInfo

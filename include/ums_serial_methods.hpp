@@ -22,12 +22,14 @@ class UmsSerialMethods
 {
 public:
     std::shared_ptr<serial::Serial> getSerial();
-    void sendTwistData(std::shared_ptr<serial::Serial> Sp, std::shared_ptr<TwistCustom> twistData);
+    void sendTwistData(std::shared_ptr<TwistCustom> twistData);
     void test(uint8_t a);
-    void loopUmsFictionData(std::shared_ptr<serial::Serial> Sp, std::shared_ptr<FictionData> FictionData);
-    void sendGetParamData(std::shared_ptr<serial::Serial> Sp);
+    void loopUmsFictionData(std::shared_ptr<FictionData> FictionData);
+    void sendGetParamData();
     void reStartSerial(std::string portName, int baudRate);
     void startSerial(std::string portName, int baudRate);
+    // 参数数据写入
+    bool ParamDataWrite(ParamsData paramsData);
     UmsSerialMethods()
     {
         std::cout << "UmsSerial" << std::endl;
@@ -39,28 +41,24 @@ public:
     }
     ~UmsSerialMethods(){
         sp.reset();
-        stopFlag = true;
-        if(spThread.joinable()){
-            spThread.join();
-        }
-        if(rdThread.joinable()){
-            rdThread.join();
-        }
     }
+
 private:
     int Rfid(std::vector<uint8_t> &byteVector);
-    void tdLoopUmsFictionData(std::shared_ptr<serial::Serial> Sp, std::shared_ptr<FictionData> FictionData);
-    // ICD
-    ICDRemote convertBackDataToControl(int channel1Value, int channel2Value, int channel3Value);
-    // RCBUS
-    RCSBUSRemote convertRCBusRemote(std::vector<uint8_t> &byteVector);
-
 
     std::string magneticDataProcess(std::vector<uint8_t> NativeData);
 
     int32_t HexArrayToInt32(uint8_t *hexArray, size_t size);
 
     float HexArrayToFloat32(uint8_t *hexArray, size_t size);
+
+
+    // ICD
+    ICDRemote convertBackDataToControl(int channel1Value, int channel2Value, int channel3Value);
+    // RCBUS
+    RCSBUSRemote convertRCBusRemote(std::vector<uint8_t> &byteVector);
+
+    void tdLoopUmsFictionData(std::shared_ptr<serial::Serial> Sp, std::shared_ptr<FictionData> FictionData);
 
     /**********************************************************************
     函数功能：消息帧内容转义
@@ -125,11 +123,18 @@ private:
     OdomInfo OdomDataProcess(std::vector<uint8_t> ImuData);
     ParamsData ParamDataRead(uint8_t *data);
     std::shared_ptr<serial::Serial> sp;
+    std::shared_ptr<FictionData> fictionData;
     void createSerial(std::string portName, int baudRate);
 
     std::atomic<bool> stopFlag = false;
+    std::atomic<bool> timeoutOccurred;
+    std::chrono::steady_clock::time_point lastReceiveTime;
     std::thread spThread;
     std::thread rdThread;
+    std::thread reThread;
+    ParamsData inputParam;
+
+    void monitorTimeout();
 };
 
 #endif // UMS_FICTION_DRIVER_MAIN_UMS_SERIAL_METHODS_H

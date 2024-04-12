@@ -55,19 +55,21 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
-add_executable(ums_fiction_driver src/ums_fiction_driver_node.cpp)
-ament_target_dependencies(ums_fiction_driver rclcpp geometry_msgs sensor_msgs nav_msgs tf2 tf2_ros tf2_geometry_msgs)
-target_include_directories(ums_fiction_driver PUBLIC
+add_executable(ums_fiction_driver_node src/ums_fiction_driver_node.cpp)
+ament_target_dependencies(ums_fiction_driver_node rclcpp geometry_msgs sensor_msgs nav_msgs tf2 tf2_ros tf2_geometry_msgs)
+target_include_directories(ums_fiction_driver_node PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>)
 # 添加链接库
-target_link_libraries(ums_fiction_driver
+target_link_libraries(ums_fiction_driver_node
         ${UMS_SDK}
         ${SERIAL}
 )
-install(TARGETS ums_fiction_driver
+install(TARGETS ums_fiction_driver_node
         DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS ${UMS_SDK} DESTINATION lib)
 install(PROGRAMS ${SERIAL} DESTINATION lib)
+install(DIRECTORY launch param script
+        DESTINATION share/${PROJECT_NAME})
 
 ament_package()
