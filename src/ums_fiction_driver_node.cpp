@@ -22,6 +22,8 @@ public:
     /*声明参数*/
     std::string port;
     int baudrate;
+    bool imu_enable = true;
+    bool odom_enable = true;
 
     UMSFictionROS2() : Node("ums_fiction_driver_node")
     {
@@ -40,8 +42,8 @@ public:
         this->declare_parameter<float>("LB", 0.0);                       // 底盘尺寸 轴间距/2 单位：m
         this->declare_parameter<int32_t>("KMTT", 0);                   // 运动学模型类型
         this->declare_parameter<float>("IMU_Z", 0.0);                  // IMU Z 轴 航向角零偏修正偏置值
-        this->declare_parameter<bool>("odom_enable", true);
-        this->declare_parameter<bool>("imu_enable", true);
+        this->declare_parameter<bool>("odom_enable", true);             // IMU enable
+        this->declare_parameter<bool>("imu_enable", true);              // odom enable
 
 
 
@@ -70,7 +72,6 @@ public:
             std::bind(&UMSFictionROS2::timer_callback, this));
         currentSerial = umsSerialMethodsPtr->getSerial();
         paramWriteByYaml();
-
         umsSerialMethodsPtr->loopUmsFictionData(currentFictionData);
 
     }
@@ -405,8 +406,7 @@ private:
     double y_;
     double theta_;
 
-    bool imu_enable = true;
-    bool odom_enable = true;
+
 };
 
 int main(int argc, char *argv[])
