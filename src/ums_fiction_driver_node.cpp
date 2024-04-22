@@ -6,15 +6,17 @@
 #include <fstream>
 #include <iomanip>
 #include <thread>
+#include <unistd.h>
 #include "serial/serial.h"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/int8.hpp"
+
 #include "geometry_msgs/msg/twist.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include "sensor_msgs/msg/imu.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/pose_with_covariance.hpp"
@@ -34,24 +36,28 @@ public:
     {
 
         /*声明参数*/
-        this->declare_parameter<int>("baudrate");
-        this->declare_parameter<std::string>("port");
-        this->get_parameter<std::string>("port", serialPort);          // 端口号
-        this->get_parameter<int>("baudrate", baudrate);                // 波特率
-        this->declare_parameter<std::string>("LC_read_write", "read"); // 读或写
-        this->declare_parameter<int32_t>("SYS_CONTROL", 0);            // 系统控制指令
-        this->declare_parameter<int32_t>("SYS_STATUS", 0);             // 系统运行状态
-        this->declare_parameter<float>("KP", 0);                       // 速度闭环控制器 比例增益
-        this->declare_parameter<float>("KI", 0);                       // 速度闭环控制器 积分增益
-        this->declare_parameter<float>("KD", 0);                       // 速度闭环控制器 微分增益
-        this->declare_parameter<float>("MPE", 0);                      // 速度测算 脉冲周数比
-        this->declare_parameter<float>("MPC", 0);                      // 速度测算 轮圆周长 单位：m
-        this->declare_parameter<float>("LA", 0);                       // 底盘尺寸 轮间距/2 单位：m
-        this->declare_parameter<float>("LB", 0);                       // 底盘尺寸 轴间距/2 单位：m
-        this->declare_parameter<int32_t>("KMTT", 0);                   // 运动学模型类型
-        this->declare_parameter<float>("IMU_Z", 0.0);                  // IMU Z 轴 航向角零偏修正偏置值
-        this->declare_parameter<bool>("encodeRfid", false);            // 是否 发送编码后rfid 默认false
-        this->get_parameter<bool>("encodeRfid", sendEncodeRfid);
+        this->declare_parameter("baudrate",baudrate);
+        this->get_parameter("baudrate", baudrate);               // 波特率
+        // this->declare_parameter<std::string>("port",serialPort);
+
+        this->declare_parameter("port",serialPort);
+        this->get_parameter("port", serialPort);          // 端口号
+
+        this->declare_parameter("LC_read_write", "read"); // 读或写
+        this->declare_parameter("SYS_CONTROL", 0);            // 系统控制指令
+        this->declare_parameter("SYS_STATUS", 0);             // 系统运行状态
+        this->declare_parameter("KP", 0.0);                       // 速度闭环控制器 比例增益
+        this->declare_parameter("KI", 0.0);                       // 速度闭环控制器 积分增益
+        this->declare_parameter("KD", 0.0);                       // 速度闭环控制器 微分增益
+        this->declare_parameter("MPE", 0.0);                      // 速度测算 脉冲周数比
+        this->declare_parameter("MPC", 0.0);                      // 速度测算 轮圆周长 单位：m
+        this->declare_parameter("LA", 0.0);                       // 底盘尺寸 轮间距/2 单位：m
+        this->declare_parameter("LB", 0.0);                       // 底盘尺寸 轴间距/2 单位：m
+        this->declare_parameter("KMTT", 0);                   // 运动学模型类型
+        this->declare_parameter("IMU_Z", 0.0);                  // IMU Z 轴 航向角零偏修正偏置值
+
+        this->declare_parameter("encodeRfid", sendEncodeRfid);            // 是否 发送编码后rfid 默认false
+        this->get_parameter("encodeRfid", sendEncodeRfid);
         // 添加参数监听器
         parameter_event_subscriber_ = this->create_subscription<rcl_interfaces::msg::ParameterEvent>(
             "/parameter_events", 10, std::bind(&TrolleyControl::parameterCallback, this, std::placeholders::_1));
@@ -60,6 +66,7 @@ public:
         createSubscription();
 
         Timer = this->create_wall_timer(5ms, std::bind(&TrolleyControl::CarPubCallBack, this));
+        TimeSysStatus = this->create_wall_timer(200ms, std::bind(&TrolleyControl::timeSysStatusCallback, this));
         // 初始化里程计数据
         current_time_ = this->now();
         last_time_ = this->now();
@@ -84,11 +91,15 @@ private:
     std::shared_ptr<tf2_ros::TransformBroadcaster> TfBroadcaster;
     rclcpp::Publisher<sensor_msgs::msg::Joy>::SharedPtr pubJoy;
     rclcpp::TimerBase::SharedPtr Timer;
+    rclcpp::TimerBase::SharedPtr TimeSysStatus;
     std::thread spThread;
     std::thread spCreateThread;
-    rclcpp::ParameterCallbackHandle callback_handle_;
+    
+    // rclcpp::ParameterCallbackHandle callback_handle_;
     rclcpp::Subscription<rcl_interfaces::msg::ParameterEvent>::SharedPtr parameter_event_subscriber_;
 
+
+    void timeSysStatusCallback();
     void parameterCallback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event);
     void createSubscription();
     void createPublish();
@@ -126,6 +137,9 @@ private:
     void reStartSerialThread();
     void RemoteDataProcessing(std::vector<uint8_t> &byteVector);
 
+
+    void refusController(); // APT/EME 状态后控制器恢复
+
     double CarXSpeed;
     double CarYSpeed;
     double CarAngle;
@@ -141,14 +155,20 @@ private:
     std::vector<uint8_t> Send_data;
     std::string Old_reset;
 
-    std::atomic<bool> initRead = false;
+    // std::atomic<bool> initRead = false;
+    // std::atomic<bool> initRead(false);
+    std::atomic<bool> initRead{false};
+
+
     bool sendEncodeRfid = false;
-    std::atomic<bool> initSerial = false;
-    std::atomic<bool> stopFlag = false;
+    std::atomic<bool> initSerial{false};
+    std::atomic<bool> stopFlag{false};
 
     ImuInfo ImuStructural;
     ParamsData ReadData;
     ControlStatus currentStatus = PROGRAM_CONTROL; // 初始化为程序控制状态
+
+    SysStatus currentSysStatus = SYS_STANDBY;
     int baudrate = 0;
     std::string serialPort;
 
@@ -159,6 +179,29 @@ private:
     double theta_;
 };
 
+
+void TrolleyControl::timeSysStatusCallback(){
+
+    if(initSerial){
+        LowerParameterOperation("sysStatus",0,0);
+    }
+
+    if(currentSysStatus == SYS_EMG_APT){
+
+        refusController();
+    }
+}
+void TrolleyControl::refusController()
+{
+    LowerParameterOperationInt("write",0,2);
+    //清除软件警报
+
+    sleep(0.025);
+
+    LowerParameterOperationInt("write",0,4);
+
+    //电机使能
+}
 void TrolleyControl::serialParamCallback()
 {
     stopFlag = false;
@@ -442,6 +485,8 @@ void TrolleyControl::CarPubCallBack()
     SendHexData.insert(SendHexData.end(), RightWheelSpeed.begin(), RightWheelSpeed.end());
     SendHexData.insert(SendHexData.end(), AngularVelocity.begin(), AngularVelocity.end());
 
+
+    
     if (Send_bit == true && initSerial && currentStatus == PROGRAM_CONTROL)
     {
         SendHexData = DataDelivery(0x4b, SendHexData);
@@ -508,6 +553,8 @@ void TrolleyControl::ParameterService()
     float ZOFS;
     this->get_parameter("IMU_Z", ZOFS);
     // RCLCPP_INFO(this->get_logger(), "LC_IMU_Z: %f", ZOFS);
+
+    
     LowerParameterOperation(LC_read_write, 8, KP);
     LowerParameterOperation(LC_read_write, 12, KI);
     LowerParameterOperation(LC_read_write, 16, KD);
@@ -590,6 +637,17 @@ void TrolleyControl::LowerParameterOperation(std::string red_write, uint8_t addr
 
         read = DataDelivery(0x52, read);
         Sp->write(read);
+    }
+    else if (red_write == "sysStatus")
+    {
+        read.push_back(0x00);
+        read.push_back(0x04);
+        read.push_back(0x00);
+        read.push_back(0x04);
+
+        read = DataDelivery(0x52, read);
+        Sp->write(read);
+        
     }
     else if (red_write == "write")
     {
@@ -766,7 +824,11 @@ void TrolleyControl::OdometerData()
     vx_chassis = DirectionalInterception(4, 8, NativeData);
     vy_chassis = DirectionalInterception(12, 8, NativeData);
     wz_chassis = DirectionalInterception(20, 8, NativeData);
+
+
     // std::cout<<"vx:"<<vx<<" vy:"<<vy<<" wz:"<<wz<<std::endl;
+
+    // printf("%f %f %f \r\n",vx_chassis,vy_chassis,wz_chassis);
 
     if (!TfBroadcaster)
     {
@@ -1180,8 +1242,22 @@ void TrolleyControl::ParamDataRead(uint8_t *data)
 {
     uint8_t msg_len = data[3];
     try
-    {
+    {   
+        
         uint8_t *p = data + 4;
+        if(msg_len == 4){
+            int32_t intValue = HexArrayToInt32(p, 4);
+            if(currentSysStatus != intValue){
+            if (intValue >= 0 && intValue <= 4) {
+                currentSysStatus = static_cast<SysStatus>(intValue);
+            } else {
+                    RCLCPP_ERROR(this->get_logger(), "Fail ReadSysStatus \n value: %d", intValue);
+                    // Handle invalid value
+            }
+            std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("SYS_STATUS", intValue)};
+            this->set_parameters(all_new_parameters);
+            }
+        }
         if (msg_len == 44)
         {
             for (int index = 0; index <= msg_len; index = index + 4)
@@ -1199,8 +1275,16 @@ void TrolleyControl::ParamDataRead(uint8_t *data)
                 }
                 case 4:
                 {
-                    std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("SYS_STATUS", intValue)};
-                    this->set_parameters(all_new_parameters);
+                    if(intValue != currentSysStatus){
+                        if (intValue >= 0 && intValue <= 4) {
+                            currentSysStatus = static_cast<SysStatus>(intValue);
+                            } else {
+                                RCLCPP_ERROR(this->get_logger(), "Fail ReadSysStatus \n value: %d", intValue);
+                                // Handle invalid value
+                            }
+                        std::vector<rclcpp::Parameter> all_new_parameters{rclcpp::Parameter("SYS_STATUS", intValue)};
+                        this->set_parameters(all_new_parameters);
+                    }
                     break;
                 }
                 case 8:
@@ -1269,6 +1353,7 @@ void TrolleyControl::ParamDataRead(uint8_t *data)
 
             TdParamsRead();
         }
+        p = nullptr;
     }
     catch (const std::exception &e)
     {
@@ -1285,9 +1370,6 @@ void TrolleyControl::DataProcessingThread()
 {
     try
     {
-        int all_data = 0;
-        int pass_data = 0;
-        int err_data = 0;
         while (true)
         {
             if (initSerial && Sp != nullptr)
@@ -1307,7 +1389,7 @@ void TrolleyControl::DataProcessingThread()
 
                         if (DataCheck_bit)
                         {
-                            pass_data++;
+                            // pass_data++;
 
                             try
                             {
@@ -1339,6 +1421,7 @@ void TrolleyControl::DataProcessingThread()
                                 }
                                 case 0x4b: // 里程计
                                 {
+                                    // printf("odom data\r\n");
                                     OdometerData();
                                 }
                                 break;
@@ -1360,7 +1443,7 @@ void TrolleyControl::DataProcessingThread()
                                     break;
                                 default:
                                     // 处理默认情况
-                                    RCLCPP_INFO(this->get_logger(), ("未处理的协议标志位" + std::to_string(NativeData[2])).c_str());
+                                    // RCLCPP_INFO(this->get_logger(), ("未处理的协议标志位" + std::to_string(NativeData[2])).c_str());
                                     break;
                                 }
                             }
@@ -1368,21 +1451,21 @@ void TrolleyControl::DataProcessingThread()
                             {
                                 std::cerr << e.what() << '\n';
                             }
-                            pass_data++;
+                            // pass_data++;
                         }
                         else
                         {
-                            err_data++;
-                            printf("\n");
-                            printf("err: %d all: %d pass: %d \n", err_data, all_data, pass_data);
-                            printf("\n");
-                            for (auto data : NativeData)
-                            {
-                                printf("%02x", data);
-                            }
-                            printf("\n");
+                            // err_data++;
+                            // printf("\n");
+                            // printf("err: %d all: %d pass: %d \n", err_data, all_data, pass_data);
+                            // printf("\n");
+                            // for (auto data : NativeData)
+                            // {
+                            //     printf("%02x", data);
+                            // }
+                            // printf("\n");
                         }
-                        all_data++;
+                        // all_data++;
                         // printf("err: %d all: %d pass: %d \n", err_data, all_data, pass_data);
                     }
                     NativeData.clear();

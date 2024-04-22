@@ -41,6 +41,14 @@ enum ControlStatus {
     PROGRAM_CONTROL,  // 程序控制状态
     REMOTE_CONTROL    // 遥控控制状态
     };
+    
+enum SysStatus {
+    SYS_STANDBY,
+    SYS_RUNNING_URT,
+    SYS_RUNNING_JOY,
+    SYS_EMG_PSB,
+    SYS_EMG_APT
+}
 
 int hexToD(std::string hexString)
 {
