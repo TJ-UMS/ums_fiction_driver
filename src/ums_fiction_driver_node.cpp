@@ -6,6 +6,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float32.hpp"
+#include "std_msgs/msg/int8.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/battery_state.hpp"
@@ -59,6 +60,8 @@ public:
         battery_publisher_ = this->create_publisher<sensor_msgs::msg::BatteryState>("battery_state", 10);
         rfid_publisher_ = this->create_publisher<std_msgs::msg::String>("rfid_data", 10);
         magnetic_publisher_ = this->create_publisher<std_msgs::msg::String>("magnetic_data", 10);
+        sysStatus_publisher_ = this->create_publisher<std_msgs::msg::Int8>("sys_status", 10);
+
         // 初始化订阅器
         cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
             "cmd_vel", 10,
@@ -144,12 +147,16 @@ private:
                     dwChange = true;
                 }
                 if(dwChange){
-                    if (umsSerialMethodsPtr->ParamDataWrite(currentFictionData->paramsData)){
+                    try {
+                        umsSerialMethodsPtr->setParamsData(currentFictionData->paramsData);
+                        umsSerialMethodsPtr->sendEditParamsData();
+                        umsSerialMethodsPtr->sendMessageToGetParamData();
                         RCLCPP_INFO(this->get_logger(), "参数写入成功");
-                        umsSerialMethodsPtr->sendGetParamData();
-                    } else {
+                    }catch (std::exception &e) {
                         RCLCPP_INFO(this->get_logger(), "参数写入失败");
                     }
+
+
                 }
             }
 
@@ -293,9 +300,32 @@ private:
             batteryPublish(currentFictionData->powerData);
 
             // 发布参数
-            if(currentFictionData->paramsData != hisParamsData){
-                hisParamsData = currentFictionData->paramsData;
-                publishParams(currentFictionData->paramsData);
+            if(hisParamsData.IMU_Z ==0 && hisParamsData.KP ==0 && hisParamsData.KD == 0 && hisParamsData.KI == 0 && hisParamsData.LB == 0 && hisParamsData.LA == 0 && hisParamsData.MPE == 0.0 && hisParamsData.MPC == 0 && hisParamsData.KMTT == 0 ){
+//                RCLCPP_INFO(this->get_logger(), "参数初始化");
+                try{
+                    umsSerialMethodsPtr->sendMessageToGetParamData();
+
+                }catch (const std::exception &e){
+                    RCLCPP_ERROR(this->get_logger(), "Failed to init parameter: %s", e.what());
+                }
+            }
+            if(!currentFictionData->paramsData.sysStatusFrame){
+                if(hisParamsData != currentFictionData->paramsData){
+                    hisParamsData = currentFictionData->paramsData;
+                    publishParams(currentFictionData->paramsData);
+                }
+
+            }
+            //发布系统状态
+            if(currentFictionData->paramsData.sysStatusFrame){
+                auto sysStatus = std_msgs::msg::Int8();
+                sysStatus.data =  static_cast<int>(currentFictionData->paramsData.sysStatusData);
+                //APT尝试恢复
+
+                if(currentFictionData->paramsData.sysStatusData == SysStatus::SYS_EMG_APT){
+                    umsSerialMethodsPtr->refuseController();
+                }
+                sysStatus_publisher_->publish(sysStatus);
             }
 
 
@@ -345,7 +375,7 @@ private:
             std::cout<< "LA: " << LA << std::endl;
             std::cout<< "IMU_Z: " << IMU_Z << std::endl;
             std::cout<< "LC_read_write: " << readOrWrite << std::endl;
-            umsSerialMethodsPtr->sendGetParamData();
+            umsSerialMethodsPtr->sendMessageToGetParamData();
         } else if(readOrWrite == "write"){
             std::cout << "write" << std::endl;
             std::cout << "KP: " << KP << std::endl;
@@ -369,7 +399,8 @@ private:
             paramsData.MPC = MPC;
             paramsData.IMU_Z = IMU_Z;
 
-            umsSerialMethodsPtr->ParamDataWrite(paramsData);
+            umsSerialMethodsPtr->setParamsData(paramsData);
+            umsSerialMethodsPtr->sendEditParamsData();
         }
     }
 
@@ -396,12 +427,14 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
     rclcpp::Subscription<rcl_interfaces::msg::ParameterEvent>::SharedPtr parameter_event_subscriber_;
 
+    rclcpp::Publisher<std_msgs::msg::Int8>::SharedPtr sysStatus_publisher_;
+
     std::shared_ptr<UmsSerialMethods> umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>();
     BatteryMonitor batteryMonitor = BatteryMonitor(12.6, 5.0);
     rclcpp::TimerBase::SharedPtr timer_; // 定时器
 
     std::shared_ptr<rclcpp::Time> last_time_ = nullptr;
-    ParamsData hisParamsData;
+    ParamsData hisParamsData{};
     double x_;
     double y_;
     double theta_;

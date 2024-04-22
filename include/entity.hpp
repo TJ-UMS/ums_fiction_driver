@@ -7,6 +7,13 @@ enum ControlStatus
     PROGRAM_CONTROL, // 程序控制状态
     REMOTE_CONTROL   // 遥控控制状态
 };
+enum class SysStatus : int{
+    SYS_STANDBY,
+    SYS_RUNNING_URT,
+    SYS_RUNNING_JOY,
+    SYS_EMG_PSB,
+    SYS_EMG_APT
+};
 
 struct ParamsData
 {
@@ -19,11 +26,14 @@ struct ParamsData
     float MPC;
     int32_t KMTT;
     float IMU_Z;
+    bool sysStatusFrame; //状态帧
+    SysStatus sysStatusData; //系统运作状态
+
     // Overload the equality operator (==)
     bool operator==(const ParamsData& other) const {
         return (KP == other.KP && KI == other.KI && KD == other.KD &&
                 LA == other.LA && LB == other.LB && MPE == other.MPE &&
-                MPC == other.MPC && KMTT == other.KMTT && IMU_Z == other.IMU_Z);
+                MPC == other.MPC && KMTT == other.KMTT && IMU_Z == other.IMU_Z && sysStatusData == other.sysStatusData);
     }
 
     // Overload the inequality operator (!=)
