@@ -21,6 +21,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/include/log4cpp)
 include_directories(${CMAKE_SOURCE_DIR}/src/serial)
 
 
@@ -32,12 +33,14 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
   link_directories(lib/x86)
   set(UMS_SDK ${CMAKE_SOURCE_DIR}/lib/x86/libums_sdk.so)
   set(SERIAL ${CMAKE_SOURCE_DIR}/lib/x86/libserial.so)
+  set(LOG4 ${CMAKE_SOURCE_DIR}/lib/x86/liblog4.so)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|ARM64|aarch64")
   # 如果为arm64
   message(STATUS "Configuring for arm64")
   link_directories(lib/arm64)
   set(UMS_SDK ${CMAKE_SOURCE_DIR}/lib/arm64/libums_sdk.so)
   set(SERIAL ${CMAKE_SOURCE_DIR}/lib/arm64/libserial.so)
+  set(LOG4 ${CMAKE_SOURCE_DIR}/lib/arm64/liblog4.so)
 else()
   message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
@@ -64,11 +67,13 @@ target_include_directories(ums_fiction_driver_node PUBLIC
 target_link_libraries(ums_fiction_driver_node
         ${UMS_SDK}
         ${SERIAL}
+        ${LOG4}
 )
 install(TARGETS ums_fiction_driver_node
         DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS ${UMS_SDK} DESTINATION lib)
 install(PROGRAMS ${SERIAL} DESTINATION lib)
+install(PROGRAMS ${LOG4} DESTINATION lib)
 install(DIRECTORY launch param script
         DESTINATION share/${PROJECT_NAME})
 

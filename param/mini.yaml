@@ -1,6 +1,7 @@
 ums_fiction_driver_node:
   ros__parameters:
     IMU_Z: -0.9
+    KMTT: 2
     LC_read_write: write
     imu_enable: false
     odom_enable: false

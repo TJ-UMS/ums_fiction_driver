@@ -2,7 +2,6 @@
 // Created by anaple on 24-3-25.
 //
 
-
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float32.hpp"
@@ -156,12 +155,9 @@ private:
                         RCLCPP_INFO(this->get_logger(), "参数写入失败");
                     }
 
-
                 }
             }
-
         }
-
     }
     void ImuDataPublish(ImuInfo ImuStructural)
     {
@@ -243,6 +239,15 @@ private:
         RCLCPP_INFO(this->get_logger(), "参数更新");
     try{
         std::vector<rclcpp::Parameter> all_new_parameters;
+        RCLCPP_INFO(this->get_logger(), "KP：%0.2f",data.KP);
+        RCLCPP_INFO(this->get_logger(), "KI：%0.2f",data.KI);
+        RCLCPP_INFO(this->get_logger(), "KD：%0.2f",data.KD);
+        RCLCPP_INFO(this->get_logger(), "MPE：%0.2f",data.MPE);
+        RCLCPP_INFO(this->get_logger(), "MPC：%0.2f",data.MPC);
+        RCLCPP_INFO(this->get_logger(), "KMTT：%d",data.KMTT);
+        RCLCPP_INFO(this->get_logger(), "LB：%0.2f",data.LB);
+        RCLCPP_INFO(this->get_logger(), "LA：%0.2f",data.LA);
+        RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f",data.IMU_Z);
         all_new_parameters.emplace_back("KP", data.KP);
         all_new_parameters.emplace_back("KI", data.KI);
         all_new_parameters.emplace_back("KD", data.KD);
@@ -275,7 +280,6 @@ private:
     {
         if (currentSerial != nullptr)
         {
-
             // 发布里程计
             if (odom_enable)
             OdometerDataPublish(currentFictionData->odomData);
@@ -301,9 +305,10 @@ private:
 
             // 发布参数
             if(hisParamsData.IMU_Z ==0 && hisParamsData.KP ==0 && hisParamsData.KD == 0 && hisParamsData.KI == 0 && hisParamsData.LB == 0 && hisParamsData.LA == 0 && hisParamsData.MPE == 0.0 && hisParamsData.MPC == 0 && hisParamsData.KMTT == 0 ){
-//                RCLCPP_INFO(this->get_logger(), "参数初始化");
                 try{
+
                     umsSerialMethodsPtr->sendMessageToGetParamData();
+
 
                 }catch (const std::exception &e){
                     RCLCPP_ERROR(this->get_logger(), "Failed to init parameter: %s", e.what());
@@ -314,7 +319,6 @@ private:
                     hisParamsData = currentFictionData->paramsData;
                     publishParams(currentFictionData->paramsData);
                 }
-
             }
             //发布系统状态
             if(currentFictionData->paramsData.sysStatusFrame){
@@ -323,6 +327,7 @@ private:
                 //APT尝试恢复
 
                 if(currentFictionData->paramsData.sysStatusData == SysStatus::SYS_EMG_APT){
+                    RCLCPP_ERROR(this->get_logger(), "下位APT错误,尝试恢复");
                     umsSerialMethodsPtr->refuseController();
                 }
                 sysStatus_publisher_->publish(sysStatus);
@@ -364,30 +369,28 @@ private:
 
 
         if(readOrWrite == "read"){
-            std::cout << "read" << std::endl;
-            std::cout << "KP: " << KP << std::endl;
-            std::cout << "KI: " << KI << std::endl;
-            std::cout << "KD: " << KD << std::endl;
-            std::cout << "MPE: " << MPE << std::endl;
-            std::cout << "MPC: " << MPC << std::endl;
-            std::cout<< "KMTT: " << KMTT << std::endl;
-            std::cout<< "LB: " << LB << std::endl;
-            std::cout<< "LA: " << LA << std::endl;
-            std::cout<< "IMU_Z: " << IMU_Z << std::endl;
-            std::cout<< "LC_read_write: " << readOrWrite << std::endl;
+            RCLCPP_INFO(this->get_logger(), "read");
+            RCLCPP_INFO(this->get_logger(), "KP：%0.2f",KP);
+            RCLCPP_INFO(this->get_logger(), "KI：%0.2f",KI);
+            RCLCPP_INFO(this->get_logger(), "KD：%0.2f",KD);
+            RCLCPP_INFO(this->get_logger(), "MPE：%0.2f",MPE);
+            RCLCPP_INFO(this->get_logger(), "MPC：%0.2f",MPC);
+            RCLCPP_INFO(this->get_logger(), "KMTT：%d",KMTT);
+            RCLCPP_INFO(this->get_logger(), "LB：%0.2f",LB);
+            RCLCPP_INFO(this->get_logger(), "LA：%0.2f",LA);
+            RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f",IMU_Z);
             umsSerialMethodsPtr->sendMessageToGetParamData();
         } else if(readOrWrite == "write"){
-            std::cout << "write" << std::endl;
-            std::cout << "KP: " << KP << std::endl;
-            std::cout << "KI: " << KI << std::endl;
-            std::cout << "KD: " << KD << std::endl;
-            std::cout << "MPE: " << MPE << std::endl;
-            std::cout << "MPC: " << MPC << std::endl;
-            std::cout<< "KMTT: " << KMTT <<std::endl;
-            std::cout<< "LB: " << LB << std::endl;
-            std::cout<< "LA: " << LA << std::endl;
-            std::cout<< "IMU_Z: " << IMU_Z << std::endl;
-            std::cout<< "LC_read_write: " << readOrWrite << std::endl;
+            RCLCPP_INFO(this->get_logger(), "write");
+            RCLCPP_INFO(this->get_logger(), "KP：%0.2f",KP);
+            RCLCPP_INFO(this->get_logger(), "KI：%0.2f",KI);
+            RCLCPP_INFO(this->get_logger(), "KD：%0.2f",KD);
+            RCLCPP_INFO(this->get_logger(), "MPE：%0.2f",MPE);
+            RCLCPP_INFO(this->get_logger(), "MPC：%0.2f",MPC);
+            RCLCPP_INFO(this->get_logger(), "KMTT：%d",KMTT);
+            RCLCPP_INFO(this->get_logger(), "LB：%0.2f",LB);
+            RCLCPP_INFO(this->get_logger(), "LA：%0.2f",LA);
+            RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f",IMU_Z);
 
             ParamsData paramsData;
 

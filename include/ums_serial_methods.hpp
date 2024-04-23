@@ -17,6 +17,9 @@
 #include "serial/serial.h"
 #include "crc.hpp"
 #include "entity.hpp"
+#include <log4cpp/Category.hh>
+#include <log4cpp/OstreamAppender.hh>
+#include <log4cpp/PatternLayout.hh>
 
 
 class UmsSerialMethods
@@ -29,27 +32,55 @@ public:
     void reStartSerial(const std::string& portName, int baudRate);
     void startSerial(const std::string& portName, int baudRate);
     void setParamsData(ParamsData paramsData);
-    void getSysStatus();
     void sendEditParamsData(){
         ParamDataWrite();
     }
     void refuseController();
+
     UmsSerialMethods()
     {
-        std::cout << "UmsSerial" << std::endl;
+
+        // 创建一个输出到标准输出的Appender
+        log4cpp::OstreamAppender* osAppender = new log4cpp::OstreamAppender("osAppender", &std::cout);
+
+        // 创建布局并设置模式
+        log4cpp::PatternLayout* layout = new log4cpp::PatternLayout();
+        layout->setConversionPattern("[%-5p%c] [%d{%Y-%m-%d %H:%M:%S}] [UMS_SDK] : %m%n");
+
+        // 将布局设置给Appender
+        osAppender->setLayout(layout);
+        root.setPriority(log4cpp::Priority::DEBUG);
+        root.addAppender(osAppender);
+        root.info("UmsSerialSDK Init");
+
+
     };
     UmsSerialMethods(const std::string& portName, int baudRate)
     {
-        std::cout << "UmsSerial2" << std::endl;
+        // 创建一个输出到标准输出的Appender
+        log4cpp::OstreamAppender *osAppender;
+        osAppender = new log4cpp::OstreamAppender("osAppender", &std::cout);
+
+        // 创建布局并设置模式
+        log4cpp::PatternLayout *layout;
+        layout = new log4cpp::PatternLayout();
+        layout->setConversionPattern("[%-5p%c] [%d{%Y-%m-%d %H:%M:%S}] [UMS_SDK] : %m%n");
+
+        // 将布局设置给Appender
+        osAppender->setLayout(layout);
+        root.setPriority(log4cpp::Priority::DEBUG);
+        root.addAppender(osAppender);
+        root.info("UmsSerialSDK Init start serial");
         startSerial(portName, baudRate);
     }
     ~UmsSerialMethods(){
         sp.reset();
+
     }
 
 private:
     static int Rfid(std::vector<uint8_t> &byteVector);
-
+    void getSysStatus();
     static std::string magneticDataProcess(const std::vector<uint8_t>& NativeData);
 
     static int32_t HexArrayToInt32(uint8_t *hexArray, size_t size);
@@ -57,7 +88,6 @@ private:
     static float HexArrayToFloat32(uint8_t *hexArray, size_t size);
     // 参数数据写入
     bool ParamDataWrite();
-
     // ICD
     static ICDRemote convertBackDataToControl(int channel1Value, int channel2Value, int channel3Value);
     // RCBUS
@@ -139,6 +169,7 @@ private:
     std::thread reThread;
     std::thread sysStatusThread;
     ParamsData inputParam{};
+    log4cpp::Category& root = log4cpp::Category::getRoot() ;
 
 
     void monitorTimeout();
