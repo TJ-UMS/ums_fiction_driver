@@ -2,8 +2,6 @@ ums_fiction_driver_node:
   ros__parameters:
     IMU_Z: -0.9
     KMTT: 2
-    LC_read_write: write
-    imu_enable: false
-    odom_enable: false
+    LC_read_write: read
     con_baudrate: 921600
     con_port: /dev/ttyUSB0

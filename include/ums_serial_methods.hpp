@@ -79,19 +79,19 @@ public:
     }
 
 private:
-    static int Rfid(std::vector<uint8_t> &byteVector);
+     int Rfid(std::vector<uint8_t> &byteVector);
     void getSysStatus();
-    static std::string magneticDataProcess(const std::vector<uint8_t>& NativeData);
+     std::string magneticDataProcess(const std::vector<uint8_t>& NativeData);
 
-    static int32_t HexArrayToInt32(uint8_t *hexArray, size_t size);
+     int32_t HexArrayToInt32(uint8_t *hexArray, size_t size);
 
-    static float HexArrayToFloat32(uint8_t *hexArray, size_t size);
+     float HexArrayToFloat32(uint8_t *hexArray, size_t size);
     // 参数数据写入
     bool ParamDataWrite();
     // ICD
-    static ICDRemote convertBackDataToControl(int channel1Value, int channel2Value, int channel3Value);
+     ICDRemote convertBackDataToControl(int channel1Value, int channel2Value, int channel3Value);
     // RCBUS
-    static RCSBUSRemote convertRCBusRemote(std::vector<uint8_t> &byteVector);
+     RCSBUSRemote convertRCBusRemote(std::vector<uint8_t> &byteVector);
 
     void tdLoopUmsFictionData(const std::shared_ptr<serial::Serial>& Sp, const std::shared_ptr<FictionData>& FictionData);
 
@@ -100,16 +100,16 @@ private:
     入口参数：std::vector<std::string>& byteVector
     返回  值：byteVector
     **********************************************************************/
-    static std::vector<uint8_t> CompoundVector(std::vector<uint8_t> &byteVector);
+     std::vector<uint8_t> CompoundVector(std::vector<uint8_t> &byteVector);
 
     /**********************************************************************
     函数功能：帧内容合成发送
     入口参数：uint8_t signbit 标志位        std::vector<uint8_t>& Vector 数据
     返回  值：无
     **********************************************************************/
-    static std::vector<uint8_t> DataDelivery(uint8_t signbit, std::vector<uint8_t> &Vector);
+     std::vector<uint8_t> DataDelivery(uint8_t signbit, std::vector<uint8_t> &Vector);
 
-    static void LowerParameterOperationInt(const std::string& basicString, uint8_t address, int32_t data, const std::shared_ptr<serial::Serial>& Sp);
+     void LowerParameterOperationInt(const std::string& basicString, uint8_t address, int32_t data, const std::shared_ptr<serial::Serial>& Sp);
 
     /**********************************************************************
     函数功能：下位参数读写操作 FLOAT
@@ -123,43 +123,51 @@ private:
     入口参数：校验数据
     返回  值：是否通过校验
     **********************************************************************/
-    static bool DataCheck(std::vector<uint8_t> &data);
+     bool DataCheck(std::vector<uint8_t> &data);
 
     /**********************************************************************
     函数功能：计算并返回转换后的 double 数值
     入口参数：startIndex 开始下标    count 截取的元素个数   byteData 1组8bytes数据
     返回  值：double result
     **********************************************************************/
-    static double DirectionalInterception(int startIndex, int count, const std::vector<uint8_t> &byteData);
+     double DirectionalInterception(int startIndex, int count, const std::vector<uint8_t> &byteData);
 
     /**********************************************************************
     函数功能：将二进制数据转换为 double 类型
     入口参数：std::vector<uint8_t>& byteData
     返回  值：double result
     **********************************************************************/
-    static double BinaryToDouble(const std::vector<uint8_t> &byteData);
+     double BinaryToDouble(const std::vector<uint8_t> &byteData);
 
     /**********************************************************************
     函数功能：函数将 double 转换为 std::vector<uint8_t> 表示
     入口参数：double value
     返回  值：无
     **********************************************************************/
-    static std::vector<uint8_t> DoubleToBytes(double value);
+    std::vector<uint8_t> DoubleToBytes(double value);
 
     /**********************************************************************
     函数功能：下位数据还原
     入口参数：buffer
     返回  值：FictionData result
     **********************************************************************/
-    static void EscapeVector(std::vector<uint8_t> &byteVector);
+     void EscapeVector(std::vector<uint8_t> &byteVector);
 
-    static PowerInfo PowerDataProcess(const std::vector<uint8_t>& NativeData);
-    static ImuInfo ImuDataProcess(std::vector<uint8_t> ImuData);
-    static OdomInfo OdomDataProcess(const std::vector<uint8_t>& ImuData);
-    static ParamsData ParamDataRead(uint8_t *data);
-    std::shared_ptr<serial::Serial> sp;
-    std::shared_ptr<FictionData> fictionData;
+     PowerInfo PowerDataProcess(const std::vector<uint8_t>& NativeData);
+     ImuInfo ImuDataProcess(std::vector<uint8_t> ImuData);
+     OdomInfo OdomDataProcess(const std::vector<uint8_t>& ImuData);
+     ParamsData ParamDataRead(uint8_t *data);
+
+
     void createSerial(const std::string& portName, int baudRate);
+    void monitorTimeout();
+    void loopToGetSysStatus();
+    std::string stringToHex(const std::string &input);
+
+
+
+    std::shared_ptr<serial::Serial> sp;
+     std::shared_ptr<FictionData> fictionData;
 
     std::atomic<bool> stopFlag = false;
     std::atomic<bool> timeoutOccurred{};
@@ -169,12 +177,11 @@ private:
     std::thread reThread;
     std::thread sysStatusThread;
     ParamsData inputParam{};
+    ImuInfo ImuStructural{};
     log4cpp::Category& root = log4cpp::Category::getRoot() ;
 
 
-    void monitorTimeout();
 
-    void loopToGetSysStatus();
 };
 
 #endif // UMS_SERIAL_METHODS_H_

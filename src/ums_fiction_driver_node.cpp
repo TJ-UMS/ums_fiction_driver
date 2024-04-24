@@ -28,7 +28,7 @@ public:
     UMSFictionROS2() : Node("ums_fiction_driver_node")
     {
 
-        this->declare_parameter<int>("con_baudrate", 921600);
+        this->declare_parameter<int>("con_baudrate",2000000 );
         this->declare_parameter<std::string>("con_port", "/dev/ttyUSB0");
         this->get_parameter<std::string>("con_port", port);                // 端口号
         this->get_parameter<int>("con_baudrate", baudrate);                // 波特率
@@ -70,12 +70,11 @@ public:
                 "/parameter_events", 10, std::bind(&UMSFictionROS2::parameterCallback, this, std::placeholders::_1));
         // 初始化定时器
         timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(18), // 1000ms / 60Hz = 约16.67ms
+            std::chrono::milliseconds(5), // 1000ms / 60Hz = 约16.67ms
             std::bind(&UMSFictionROS2::timer_callback, this));
         currentSerial = umsSerialMethodsPtr->getSerial();
         paramWriteByYaml();
         umsSerialMethodsPtr->loopUmsFictionData(currentFictionData);
-
     }
     ~UMSFictionROS2()
     {
@@ -308,8 +307,7 @@ private:
                 try{
 
                     umsSerialMethodsPtr->sendMessageToGetParamData();
-
-
+                    RCLCPP_INFO(this->get_logger(), "参数初始化");
                 }catch (const std::exception &e){
                     RCLCPP_ERROR(this->get_logger(), "Failed to init parameter: %s", e.what());
                 }
@@ -317,7 +315,7 @@ private:
             if(!currentFictionData->paramsData.sysStatusFrame){
                 if(hisParamsData != currentFictionData->paramsData){
                     hisParamsData = currentFictionData->paramsData;
-                    publishParams(currentFictionData->paramsData);
+                    publishParams(hisParamsData);
                 }
             }
             //发布系统状态
