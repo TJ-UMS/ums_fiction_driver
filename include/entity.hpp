@@ -7,6 +7,7 @@ enum ControlStatus
     PROGRAM_CONTROL, // 程序控制状态
     REMOTE_CONTROL   // 遥控控制状态
 };
+
 enum class SysStatus : int{
     SYS_STANDBY,
     SYS_RUNNING_URT,
@@ -74,7 +75,6 @@ struct ImuInfo
     double yaw;
     double pitch;
 };
-
 struct ICDRemote {
     double az;
     double vx;
@@ -83,10 +83,12 @@ struct ICDRemote {
 };
 
 struct RCSBUSRemote {
-    int len;
-    uint16_t  axes [8];
-    uint16_t buttons [8];
+ int len;
+ uint16_t  axes [8];
+ uint16_t buttons [8];
 };
+
+
 
 
 
@@ -102,7 +104,11 @@ struct FictionData
     float temperature;
     ICDRemote icdData;
     RCSBUSRemote rcsBusData;
+
 };
+
+
+
 
 struct TwistCustom
 {

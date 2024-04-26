@@ -68,11 +68,18 @@ public:
         // 初始化参数监听
         parameter_event_subscriber_ = this->create_subscription<rcl_interfaces::msg::ParameterEvent>(
                 "/parameter_events", 10, std::bind(&UMSFictionROS2::parameterCallback, this, std::placeholders::_1));
+
+
+        currentSerial = umsSerialMethodsPtr->getSerial();
         // 初始化定时器
         timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(5), // 1000ms / 60Hz = 约16.67ms
-            std::bind(&UMSFictionROS2::timer_callback, this));
-        currentSerial = umsSerialMethodsPtr->getSerial();
+                std::chrono::milliseconds(5), // 1000ms / 60Hz = 约16.67ms
+                std::bind(&UMSFictionROS2::timer_callback, this));
+        idle_timer_ = this->create_wall_timer(
+                std::chrono::milliseconds(17), // 1000ms / 60Hz = 约16.67ms
+                std::bind(&UMSFictionROS2::twistIdle,this)
+        );
+        idle_time_ = std::make_shared<rclcpp::Time>(this->now());
         paramWriteByYaml();
         umsSerialMethodsPtr->loopUmsFictionData(currentFictionData);
     }
@@ -307,7 +314,7 @@ private:
                 try{
 
                     umsSerialMethodsPtr->sendMessageToGetParamData();
-                    RCLCPP_INFO(this->get_logger(), "参数初始化");
+                    RCLCPP_INFO(this->get_logger(), "等待参数初始化....");
                 }catch (const std::exception &e){
                     RCLCPP_ERROR(this->get_logger(), "Failed to init parameter: %s", e.what());
                 }
@@ -342,6 +349,7 @@ private:
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
     {
         // 在这里处理接收到的cmd_vel消息
+        idle_time_ = std::make_shared<rclcpp::Time>(this->now());
         auto twistA = std::make_shared<TwistCustom>();
         twistA->angular_z = msg->angular.z;
         twistA->linear_x = msg->linear.x;
@@ -418,6 +426,16 @@ private:
         battery_publisher_->publish(message);
     }
 
+    void twistIdle(){
+        if(this->now().nanoseconds() - idle_time_->nanoseconds() > 100000000){
+            auto twistA = std::make_shared<TwistCustom>();
+            twistA->angular_z = 0;
+            twistA->linear_x = 0;
+            twistA->linear_y = 0;
+            umsSerialMethodsPtr->sendTwistData(twistA);
+        }
+    }
+
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
     rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr ultrasonic_publisher_;
@@ -433,6 +451,11 @@ private:
     std::shared_ptr<UmsSerialMethods> umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>();
     BatteryMonitor batteryMonitor = BatteryMonitor(12.6, 5.0);
     rclcpp::TimerBase::SharedPtr timer_; // 定时器
+
+    std::shared_ptr<rclcpp::Time> idle_time_ = nullptr;
+    rclcpp::TimerBase::SharedPtr idle_timer_; // 定时器
+
+
 
     std::shared_ptr<rclcpp::Time> last_time_ = nullptr;
     ParamsData hisParamsData{};
