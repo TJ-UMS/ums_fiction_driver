@@ -13,6 +13,8 @@
 #include "ums_serial_methods.hpp"
 #include "battery.h"
 #include "tf2/LinearMath/Quaternion.h"
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 class UMSFictionROS2 : public rclcpp::Node
 {
@@ -22,8 +24,8 @@ public:
     /*声明参数*/
     std::string port;
     int baudrate;
-    bool imu_enable = true;
-    bool odom_enable = true;
+    bool imuEnable = true;
+    bool odomEnable = true;
 
     UMSFictionROS2() : Node("ums_fiction_driver_node")
     {
@@ -44,13 +46,14 @@ public:
         this->declare_parameter<float>("IMU_Z", 0.0);                  // IMU Z 轴 航向角零偏修正偏置值
         this->declare_parameter<bool>("odom_enable", true);             // IMU enable
         this->declare_parameter<bool>("imu_enable", true);              // odom enable
+        this->declare_parameter<bool>("odom_tf_enable", true); // odom tf broadcast
 
 
-
-
-        umsSerialMethodsPtr->startSerial(port, baudrate);
-        this->get_parameter("odom_enable", odom_enable);
-        this->get_parameter("imu",imu_enable);
+        umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>(port,baudrate, true,50);
+//        umsSerialMethodsPtr->startSerial(port, baudrate);
+        this->get_parameter("odom_enable", odomEnable);
+        this->get_parameter("imu",imuEnable);
+        this->get_parameter("odom_tf_enable", odomTfEnabled_);
         // 初始化发布器
         imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu", 10);
         odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
@@ -83,12 +86,12 @@ public:
         paramWriteByYaml();
         umsSerialMethodsPtr->loopUmsFictionData(currentFictionData);
     }
-    ~UMSFictionROS2()
-    {
-        currentFictionData.reset();
-        currentSerial.reset();
-        umsSerialMethodsPtr.reset();
-    }
+//    ~UMSFictionROS2()
+//    {
+//        currentFictionData.reset();
+//        currentSerial.reset();
+//        umsSerialMethodsPtr.reset();
+//    }
 
 private:
     void parameterCallback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
@@ -106,10 +109,12 @@ private:
                 currentSerial.reset();
                 currentSerial = umsSerialMethodsPtr->getSerial();
             } else if (changed_parameter.name == "imu_enable"){
-                imu_enable = changed_parameter.value.bool_value;
-        } else if (changed_parameter.name == "odom_enable"){
-                odom_enable = changed_parameter.value.bool_value;
-        }
+                imuEnable = changed_parameter.value.bool_value;
+            } else if (changed_parameter.name == "odom_enable"){
+                    odomEnable = changed_parameter.value.bool_value;
+            } else if (changed_parameter.name == "odom_tf_enable"){
+                    odomTfEnabled_ = changed_parameter.value.bool_value;
+            }
             if(currentSerial != nullptr) {
                 if (changed_parameter.name == "KP" &&
                     changed_parameter.value.double_value != currentFictionData->paramsData.KP) {
@@ -198,6 +203,8 @@ private:
             last_time_ = std::make_shared<rclcpp::Time>(this->now());
         }
 
+
+
         // 获取时间
         rclcpp::Time current_time_ = this->now();
 
@@ -218,6 +225,27 @@ private:
 
         tf2::Quaternion quat;
         quat.setRPY(0, 0, theta_);
+
+        if (odomTfEnabled_){
+            if (tfBroadcaster_odom_ == nullptr)
+            {
+                tfBroadcaster_odom_ = std::make_shared<tf2_ros::TransformBroadcaster>(this->shared_from_this());
+            }
+            // 发布tf坐标变换
+            geometry_msgs::msg::TransformStamped odom_trans;
+            odom_trans.header.stamp = current_time_;
+            odom_trans.header.frame_id = "odom";
+            odom_trans.child_frame_id = "base_link";
+            odom_trans.transform.translation.x = x_;
+            odom_trans.transform.translation.y = y_;
+            odom_trans.transform.translation.z = 0.0;
+            odom_trans.transform.rotation.x = quat.x();
+            odom_trans.transform.rotation.y = quat.y();
+            odom_trans.transform.rotation.z = quat.z();
+            odom_trans.transform.rotation.w = quat.w();
+            tfBroadcaster_odom_->sendTransform(odom_trans);
+
+        }
 
         // 发布里程计消息
         nav_msgs::msg::Odometry odom;
@@ -287,10 +315,10 @@ private:
         if (currentSerial != nullptr)
         {
             // 发布里程计
-            if (odom_enable)
+            if (odomEnable)
             OdometerDataPublish(currentFictionData->odomData);
             // 发布IMU
-            if (imu_enable)
+            if (imuEnable)
             ImuDataPublish(currentFictionData->imuStructural);
             // 发布 RFID
             auto r = std_msgs::msg::String();
@@ -356,7 +384,6 @@ private:
         twistA->linear_y = msg->linear.y;
         umsSerialMethodsPtr->sendTwistData(twistA);
     }
-
     void paramWriteByYaml(){
         float KP, MPC, KD, LB, MPE, IMU_Z, LA, KI;
         int KMTT;
@@ -448,13 +475,14 @@ private:
 
     rclcpp::Publisher<std_msgs::msg::Int8>::SharedPtr sysStatus_publisher_;
 
-    std::shared_ptr<UmsSerialMethods> umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>();
+    std::shared_ptr<UmsSerialMethods> umsSerialMethodsPtr = nullptr;
     BatteryMonitor batteryMonitor = BatteryMonitor(12.6, 5.0);
     rclcpp::TimerBase::SharedPtr timer_; // 定时器
 
     std::shared_ptr<rclcpp::Time> idle_time_ = nullptr;
     rclcpp::TimerBase::SharedPtr idle_timer_; // 定时器
-
+    std::shared_ptr<tf2_ros::TransformBroadcaster> tfBroadcaster_odom_ = nullptr;
+    bool  odomTfEnabled_ = true;
 
 
     std::shared_ptr<rclcpp::Time> last_time_ = nullptr;

@@ -34,51 +34,12 @@ public:
     void reStartSerial(const std::string& portName, int baudRate);
     void startSerial(const std::string& portName, int baudRate);
     void setParamsData(ParamsData paramsData);
-    void sendEditParamsData(){
-        ParamDataWrite();
-    }
+    void sendEditParamsData();
     void refuseController();
-
-    UmsSerialMethods()
-    {
-        circularQueue = std::make_shared<CircularQueue>(4);
-        // 创建一个输出到标准输出的Appender
-        log4cpp::OstreamAppender* osAppender = new log4cpp::OstreamAppender("osAppender", &std::cout);
-
-        // 创建布局并设置模式
-        log4cpp::PatternLayout* layout = new log4cpp::PatternLayout();
-        layout->setConversionPattern("[%-5p%c] [%d{%Y-%m-%d %H:%M:%S}] [UMS_SDK] : %m%n");
-
-        // 将布局设置给Appender
-        osAppender->setLayout(layout);
-        root.setPriority(log4cpp::Priority::DEBUG);
-        root.addAppender(osAppender);
-        root.info("UmsSerialSDK Init");
-
-
-    };
-    UmsSerialMethods(const std::string& portName, int baudRate)
-    {
-        circularQueue = std::make_shared<CircularQueue>(4);
-        // 创建一个输出到标准输出的Appender
-        log4cpp::OstreamAppender *osAppender;
-        osAppender = new log4cpp::OstreamAppender("osAppender", &std::cout);
-
-        // 创建布局并设置模式
-        log4cpp::PatternLayout *layout;
-        layout = new log4cpp::PatternLayout();
-        layout->setConversionPattern("[%-5p%c] [%d{%Y-%m-%d %H:%M:%S}] [UMS_SDK] : %m%n");
-
-        // 将布局设置给Appender
-        osAppender->setLayout(layout);
-        root.setPriority(log4cpp::Priority::DEBUG);
-        root.addAppender(osAppender);
-        root.info("UmsSerialSDK Init start serial");
-        startSerial(portName, baudRate);
-    }
+    UmsSerialMethods();
+    UmsSerialMethods(const std::string& portName, int baudRate ,bool isDebug ,int queueSize);
     ~UmsSerialMethods(){
         sp.reset();
-
     }
 
 private:
