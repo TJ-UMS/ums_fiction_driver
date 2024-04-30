@@ -16,6 +16,12 @@ enum class SysStatus : int{
     SYS_EMG_APT
 };
 
+enum class AgreementVersion : int
+{
+    V1,
+    V2
+};
+
 struct ParamsData
 {
     float KP;

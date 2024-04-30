@@ -30,7 +30,7 @@ public:
     UMSFictionROS2() : Node("ums_fiction_driver_node")
     {
 
-        this->declare_parameter<int>("con_baudrate",2000000 );
+        this->declare_parameter<int>("con_baudrate",921600);
         this->declare_parameter<std::string>("con_port", "/dev/ttyUSB0");
         this->get_parameter<std::string>("con_port", port);                // 端口号
         this->get_parameter<int>("con_baudrate", baudrate);                // 波特率
@@ -49,7 +49,7 @@ public:
         this->declare_parameter<bool>("odom_tf_enable", true); // odom tf broadcast
 
 
-        umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>(port,baudrate, true,50);
+        umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>(port,baudrate, false, 40, AgreementVersion::V1);
 //        umsSerialMethodsPtr->startSerial(port, baudrate);
         this->get_parameter("odom_enable", odomEnable);
         this->get_parameter("imu",imuEnable);
@@ -76,24 +76,29 @@ public:
         currentSerial = umsSerialMethodsPtr->getSerial();
         // 初始化定时器
         timer_ = this->create_wall_timer(
-                std::chrono::milliseconds(5), // 1000ms / 60Hz = 约16.67ms
+                std::chrono::milliseconds(18), // 1000ms / 60Hz = 约16.67ms
                 std::bind(&UMSFictionROS2::timer_callback, this));
-        idle_timer_ = this->create_wall_timer(
-                std::chrono::milliseconds(17), // 1000ms / 60Hz = 约16.67ms
-                std::bind(&UMSFictionROS2::twistIdle,this)
-        );
+//        idle_timer_ = this->create_wall_timer(
+//                std::chrono::milliseconds(17), // 1000ms / 60Hz = 约16.67ms
+//                std::bind(&UMSFictionROS2::twistIdle,this)
+//        );
+
+        imu_timer_ = this->create_wall_timer(
+                std::chrono::milliseconds(4), // 1000ms / 200Hz = 约5ms
+                std::bind(&UMSFictionROS2::imuTimerCallback, this));
+
         idle_time_ = std::make_shared<rclcpp::Time>(this->now());
         paramWriteByYaml();
         umsSerialMethodsPtr->loopUmsFictionData(currentFictionData);
     }
-//    ~UMSFictionROS2()
-//    {
-//        currentFictionData.reset();
-//        currentSerial.reset();
-//        umsSerialMethodsPtr.reset();
-//    }
 
 private:
+    void imuTimerCallback()
+    {
+        if(imuEnable){
+            ImuDataPublish(currentFictionData->imuStructural); //发布IMU
+       }
+   }
     void parameterCallback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
     {
         bool dwChange = false;
@@ -318,8 +323,7 @@ private:
             if (odomEnable)
             OdometerDataPublish(currentFictionData->odomData);
             // 发布IMU
-            if (imuEnable)
-            ImuDataPublish(currentFictionData->imuStructural);
+
             // 发布 RFID
             auto r = std_msgs::msg::String();
             r.data = currentFictionData->rfidData;
@@ -476,8 +480,9 @@ private:
     rclcpp::Publisher<std_msgs::msg::Int8>::SharedPtr sysStatus_publisher_;
 
     std::shared_ptr<UmsSerialMethods> umsSerialMethodsPtr = nullptr;
-    BatteryMonitor batteryMonitor = BatteryMonitor(12.6, 5.0);
+    BatteryMonitor batteryMonitor = BatteryMonitor(12.6, 10.0);
     rclcpp::TimerBase::SharedPtr timer_; // 定时器
+    rclcpp::TimerBase::SharedPtr imu_timer_; // IMU定时器
 
     std::shared_ptr<rclcpp::Time> idle_time_ = nullptr;
     rclcpp::TimerBase::SharedPtr idle_timer_; // 定时器
