@@ -30,29 +30,28 @@ public:
     UMSFictionROS2() : Node("ums_fiction_driver_node")
     {
 
-        this->declare_parameter<int>("con_baudrate",921600);
+        this->declare_parameter<int>("con_baudrate", 921600);
         this->declare_parameter<std::string>("con_port", "/dev/ttyUSB0");
-        this->get_parameter<std::string>("con_port", port);                // 端口号
-        this->get_parameter<int>("con_baudrate", baudrate);                // 波特率
+        this->get_parameter<std::string>("con_port", port);            // 端口号
+        this->get_parameter<int>("con_baudrate", baudrate);            // 波特率
         this->declare_parameter<std::string>("LC_read_write", "read"); // 读或写
-        this->declare_parameter<float>("KP", 0.0);                       // 速度闭环控制器 比例增益
-        this->declare_parameter<float>("KI", 0.0);                       // 速度闭环控制器 积分增益
-        this->declare_parameter<float>("KD", 0.0);                       // 速度闭环控制器 微分增益
-        this->declare_parameter<float>("MPE", 0.0);                      // 速度测算 脉冲周数比
-        this->declare_parameter<float>("MPC", 0.0);                      // 速度测算 轮圆周长 单位：m
-        this->declare_parameter<float>("LA", 0.0);                       // 底盘尺寸 轮间距/2 单位：m
-        this->declare_parameter<float>("LB", 0.0);                       // 底盘尺寸 轴间距/2 单位：m
+        this->declare_parameter<float>("KP", 0.0);                     // 速度闭环控制器 比例增益
+        this->declare_parameter<float>("KI", 0.0);                     // 速度闭环控制器 积分增益
+        this->declare_parameter<float>("KD", 0.0);                     // 速度闭环控制器 微分增益
+        this->declare_parameter<float>("MPE", 0.0);                    // 速度测算 脉冲周数比
+        this->declare_parameter<float>("MPC", 0.0);                    // 速度测算 轮圆周长 单位：m
+        this->declare_parameter<float>("LA", 0.0);                     // 底盘尺寸 轮间距/2 单位：m
+        this->declare_parameter<float>("LB", 0.0);                     // 底盘尺寸 轴间距/2 单位：m
         this->declare_parameter<int32_t>("KMTT", 0);                   // 运动学模型类型
         this->declare_parameter<float>("IMU_Z", 0.0);                  // IMU Z 轴 航向角零偏修正偏置值
-        this->declare_parameter<bool>("odom_enable", true);             // IMU enable
-        this->declare_parameter<bool>("imu_enable", true);              // odom enable
-        this->declare_parameter<bool>("odom_tf_enable", true); // odom tf broadcast
+        this->declare_parameter<bool>("odom_enable", true);            // IMU enable
+        this->declare_parameter<bool>("imu_enable", true);             // odom enable
+        this->declare_parameter<bool>("odom_tf_enable", true);         // odom tf broadcast
 
-
-        umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>(port,baudrate, false, 40, AgreementVersion::V1);
-//        umsSerialMethodsPtr->startSerial(port, baudrate);
+        umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>(port, baudrate, false, 40, AgreementVersion::V1);
+        //        umsSerialMethodsPtr->startSerial(port, baudrate);
         this->get_parameter("odom_enable", odomEnable);
-        this->get_parameter("imu",imuEnable);
+        this->get_parameter("imu", imuEnable);
         this->get_parameter("odom_tf_enable", odomTfEnabled_);
         // 初始化发布器
         imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu", 10);
@@ -70,22 +69,21 @@ public:
             std::bind(&UMSFictionROS2::cmd_vel_callback, this, std::placeholders::_1));
         // 初始化参数监听
         parameter_event_subscriber_ = this->create_subscription<rcl_interfaces::msg::ParameterEvent>(
-                "/parameter_events", 10, std::bind(&UMSFictionROS2::parameterCallback, this, std::placeholders::_1));
-
+            "/parameter_events", 10, std::bind(&UMSFictionROS2::parameterCallback, this, std::placeholders::_1));
 
         currentSerial = umsSerialMethodsPtr->getSerial();
         // 初始化定时器
         timer_ = this->create_wall_timer(
-                std::chrono::milliseconds(18), // 1000ms / 60Hz = 约16.67ms
-                std::bind(&UMSFictionROS2::timer_callback, this));
-//        idle_timer_ = this->create_wall_timer(
-//                std::chrono::milliseconds(17), // 1000ms / 60Hz = 约16.67ms
-//                std::bind(&UMSFictionROS2::twistIdle,this)
-//        );
+            std::chrono::milliseconds(18), // 1000ms / 60Hz = 约16.67ms
+            std::bind(&UMSFictionROS2::timer_callback, this));
+        //        idle_timer_ = this->create_wall_timer(
+        //                std::chrono::milliseconds(17), // 1000ms / 60Hz = 约16.67ms
+        //                std::bind(&UMSFictionROS2::twistIdle,this)
+        //        );
 
         imu_timer_ = this->create_wall_timer(
-                std::chrono::milliseconds(4), // 1000ms / 200Hz = 约5ms
-                std::bind(&UMSFictionROS2::imuTimerCallback, this));
+            std::chrono::milliseconds(4), // 1000ms / 200Hz = 约5ms
+            std::bind(&UMSFictionROS2::imuTimerCallback, this));
 
         idle_time_ = std::make_shared<rclcpp::Time>(this->now());
         paramWriteByYaml();
@@ -95,82 +93,111 @@ public:
 private:
     void imuTimerCallback()
     {
-        if(imuEnable){
-            ImuDataPublish(currentFictionData->imuStructural); //发布IMU
-       }
-   }
+        if (imuEnable)
+        {
+            ImuDataPublish(currentFictionData->imuStructural); // 发布IMU
+        }
+    }
     void parameterCallback(const rcl_interfaces::msg::ParameterEvent::SharedPtr event)
     {
         bool dwChange = false;
         for (const auto &changed_parameter : event->changed_parameters)
-        {   if(changed_parameter.name == "con_port"){
+        {
+            if (changed_parameter.name == "con_port")
+            {
                 umsSerialMethodsPtr->reStartSerial(changed_parameter.value.string_value, baudrate);
-                port  = changed_parameter.value.string_value;
+                port = changed_parameter.value.string_value;
                 currentSerial.reset();
-                currentSerial =  umsSerialMethodsPtr->getSerial();
-            }else if(changed_parameter.name == "con_baudrate"){
+                currentSerial = umsSerialMethodsPtr->getSerial();
+            }
+            else if (changed_parameter.name == "con_baudrate")
+            {
                 umsSerialMethodsPtr->reStartSerial(port, changed_parameter.value.integer_value);
                 baudrate = changed_parameter.value.integer_value;
                 currentSerial.reset();
                 currentSerial = umsSerialMethodsPtr->getSerial();
-            } else if (changed_parameter.name == "imu_enable"){
-                imuEnable = changed_parameter.value.bool_value;
-            } else if (changed_parameter.name == "odom_enable"){
-                    odomEnable = changed_parameter.value.bool_value;
-            } else if (changed_parameter.name == "odom_tf_enable"){
-                    odomTfEnabled_ = changed_parameter.value.bool_value;
             }
-            if(currentSerial != nullptr) {
+            else if (changed_parameter.name == "imu_enable")
+            {
+                imuEnable = changed_parameter.value.bool_value;
+            }
+            else if (changed_parameter.name == "odom_enable")
+            {
+                odomEnable = changed_parameter.value.bool_value;
+            }
+            else if (changed_parameter.name == "odom_tf_enable")
+            {
+                odomTfEnabled_ = changed_parameter.value.bool_value;
+            }
+            if (currentSerial != nullptr)
+            {
                 if (changed_parameter.name == "KP" &&
-                    changed_parameter.value.double_value != currentFictionData->paramsData.KP) {
+                    changed_parameter.value.double_value != currentFictionData->paramsData.KP)
+                {
                     currentFictionData->paramsData.KP = changed_parameter.value.double_value;
                     dwChange = true;
-                } else if (changed_parameter.name == "KI" &&
-                           changed_parameter.value.double_value != currentFictionData->paramsData.KI) {
+                }
+                else if (changed_parameter.name == "KI" &&
+                         changed_parameter.value.double_value != currentFictionData->paramsData.KI)
+                {
                     currentFictionData->paramsData.KI = changed_parameter.value.double_value;
                     dwChange = true;
-
-                } else if (changed_parameter.name == "KD" &&
-                           changed_parameter.value.double_value != currentFictionData->paramsData.KD) {
+                }
+                else if (changed_parameter.name == "KD" &&
+                         changed_parameter.value.double_value != currentFictionData->paramsData.KD)
+                {
                     currentFictionData->paramsData.KD = changed_parameter.value.double_value;
                     dwChange = true;
-                } else if (changed_parameter.name == "MPE" &&
-                           changed_parameter.value.double_value != currentFictionData->paramsData.MPE) {
+                }
+                else if (changed_parameter.name == "MPE" &&
+                         changed_parameter.value.double_value != currentFictionData->paramsData.MPE)
+                {
                     currentFictionData->paramsData.MPE = changed_parameter.value.double_value;
                     dwChange = true;
-
-                } else if (changed_parameter.name == "MPC" &&
-                           changed_parameter.value.double_value != currentFictionData->paramsData.MPC) {
+                }
+                else if (changed_parameter.name == "MPC" &&
+                         changed_parameter.value.double_value != currentFictionData->paramsData.MPC)
+                {
                     currentFictionData->paramsData.MPC = changed_parameter.value.double_value;
                     dwChange = true;
-                } else if (changed_parameter.name == "LA" &&
-                           changed_parameter.value.double_value != currentFictionData->paramsData.LA) {
+                }
+                else if (changed_parameter.name == "LA" &&
+                         changed_parameter.value.double_value != currentFictionData->paramsData.LA)
+                {
                     currentFictionData->paramsData.LA = changed_parameter.value.double_value;
                     dwChange = true;
-                } else if (changed_parameter.name == "LB" &&
-                           changed_parameter.value.double_value != currentFictionData->paramsData.LB) {
+                }
+                else if (changed_parameter.name == "LB" &&
+                         changed_parameter.value.double_value != currentFictionData->paramsData.LB)
+                {
                     currentFictionData->paramsData.LB = changed_parameter.value.double_value;
                     dwChange = true;
-                } else if (changed_parameter.name == "KMTT" &&
-                           changed_parameter.value.integer_value != currentFictionData->paramsData.KMTT) {
+                }
+                else if (changed_parameter.name == "KMTT" &&
+                         changed_parameter.value.integer_value != currentFictionData->paramsData.KMTT)
+                {
                     currentFictionData->paramsData.KMTT = changed_parameter.value.integer_value;
                     dwChange = true;
-
-                } else if (changed_parameter.name == "IMU_Z" &&
-                           changed_parameter.value.double_value != currentFictionData->paramsData.IMU_Z) {
+                }
+                else if (changed_parameter.name == "IMU_Z" &&
+                         changed_parameter.value.double_value != currentFictionData->paramsData.IMU_Z)
+                {
                     currentFictionData->paramsData.IMU_Z = changed_parameter.value.double_value;
                     dwChange = true;
                 }
-                if(dwChange){
-                    try {
+                if (dwChange)
+                {
+                    try
+                    {
                         umsSerialMethodsPtr->setParamsData(currentFictionData->paramsData);
                         umsSerialMethodsPtr->sendEditParamsData();
                         umsSerialMethodsPtr->sendMessageToGetParamData();
                         RCLCPP_INFO(this->get_logger(), "参数写入成功");
-                    }catch (std::exception &e) {
+                    }
+                    catch (std::exception &e)
+                    {
                         RCLCPP_INFO(this->get_logger(), "参数写入失败");
                     }
-
                 }
             }
         }
@@ -208,8 +235,6 @@ private:
             last_time_ = std::make_shared<rclcpp::Time>(this->now());
         }
 
-
-
         // 获取时间
         rclcpp::Time current_time_ = this->now();
 
@@ -231,7 +256,8 @@ private:
         tf2::Quaternion quat;
         quat.setRPY(0, 0, theta_);
 
-        if (odomTfEnabled_){
+        if (odomTfEnabled_)
+        {
             if (tfBroadcaster_odom_ == nullptr)
             {
                 tfBroadcaster_odom_ = std::make_shared<tf2_ros::TransformBroadcaster>(this->shared_from_this());
@@ -249,7 +275,6 @@ private:
             odom_trans.transform.rotation.z = quat.z();
             odom_trans.transform.rotation.w = quat.w();
             tfBroadcaster_odom_->sendTransform(odom_trans);
-
         }
 
         // 发布里程计消息
@@ -271,48 +296,46 @@ private:
         last_time_ = std::make_shared<rclcpp::Time>(current_time_);
     }
 
-
-
     void publishParams(const ParamsData &data)
     {
         RCLCPP_INFO(this->get_logger(), "参数更新");
-    try{
-        std::vector<rclcpp::Parameter> all_new_parameters;
-        RCLCPP_INFO(this->get_logger(), "KP：%0.2f",data.KP);
-        RCLCPP_INFO(this->get_logger(), "KI：%0.2f",data.KI);
-        RCLCPP_INFO(this->get_logger(), "KD：%0.2f",data.KD);
-        RCLCPP_INFO(this->get_logger(), "MPE：%0.2f",data.MPE);
-        RCLCPP_INFO(this->get_logger(), "MPC：%0.2f",data.MPC);
-        RCLCPP_INFO(this->get_logger(), "KMTT：%d",data.KMTT);
-        RCLCPP_INFO(this->get_logger(), "LB：%0.2f",data.LB);
-        RCLCPP_INFO(this->get_logger(), "LA：%0.2f",data.LA);
-        RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f",data.IMU_Z);
-        all_new_parameters.emplace_back("KP", data.KP);
-        all_new_parameters.emplace_back("KI", data.KI);
-        all_new_parameters.emplace_back("KD", data.KD);
-        all_new_parameters.emplace_back("LA", data.LA);
-        all_new_parameters.emplace_back("LB", data.LB);
-        all_new_parameters.emplace_back("MPE", data.MPE);
-        all_new_parameters.emplace_back("MPC", data.MPC);
-        all_new_parameters.emplace_back("KMTT", data.KMTT);
-        all_new_parameters.emplace_back("IMU_Z", data.IMU_Z);
-        // 使用 set_parameters 来批量设置参数
-        auto result = this->set_parameters(all_new_parameters);
-        for (const auto &res : result)
+        try
         {
-            if (!res.successful)
+            std::vector<rclcpp::Parameter> all_new_parameters;
+            RCLCPP_INFO(this->get_logger(), "KP：%0.2f", data.KP);
+            RCLCPP_INFO(this->get_logger(), "KI：%0.2f", data.KI);
+            RCLCPP_INFO(this->get_logger(), "KD：%0.2f", data.KD);
+            RCLCPP_INFO(this->get_logger(), "MPE：%0.2f", data.MPE);
+            RCLCPP_INFO(this->get_logger(), "MPC：%0.2f", data.MPC);
+            RCLCPP_INFO(this->get_logger(), "KMTT：%d", data.KMTT);
+            RCLCPP_INFO(this->get_logger(), "LB：%0.2f", data.LB);
+            RCLCPP_INFO(this->get_logger(), "LA：%0.2f", data.LA);
+            RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f", data.IMU_Z);
+            all_new_parameters.emplace_back("KP", data.KP);
+            all_new_parameters.emplace_back("KI", data.KI);
+            all_new_parameters.emplace_back("KD", data.KD);
+            all_new_parameters.emplace_back("LA", data.LA);
+            all_new_parameters.emplace_back("LB", data.LB);
+            all_new_parameters.emplace_back("MPE", data.MPE);
+            all_new_parameters.emplace_back("MPC", data.MPC);
+            all_new_parameters.emplace_back("KMTT", data.KMTT);
+            all_new_parameters.emplace_back("IMU_Z", data.IMU_Z);
+            // 使用 set_parameters 来批量设置参数
+            auto result = this->set_parameters(all_new_parameters);
+            for (const auto &res : result)
             {
-                RCLCPP_ERROR(this->get_logger(), "Failed to set parameter: %s", res.reason.c_str());
-                return;
+                if (!res.successful)
+                {
+                    RCLCPP_ERROR(this->get_logger(), "Failed to set parameter: %s", res.reason.c_str());
+                    return;
+                }
             }
         }
-
-    }catch (const std::exception &e){
-        RCLCPP_ERROR(this->get_logger(), "Failed to set parameter: %s", e.what());
-        return;
-    }
-
-
+        catch (const std::exception &e)
+        {
+            RCLCPP_ERROR(this->get_logger(), "Failed to set parameter: %s", e.what());
+            return;
+        }
     }
 
     void timer_callback()
@@ -321,7 +344,7 @@ private:
         {
             // 发布里程计
             if (odomEnable)
-            OdometerDataPublish(currentFictionData->odomData);
+                OdometerDataPublish(currentFictionData->odomData);
             // 发布IMU
 
             // 发布 RFID
@@ -342,34 +365,41 @@ private:
             batteryPublish(currentFictionData->powerData);
 
             // 发布参数
-            if(hisParamsData.IMU_Z ==0 && hisParamsData.KP ==0 && hisParamsData.KD == 0 && hisParamsData.KI == 0 && hisParamsData.LB == 0 && hisParamsData.LA == 0 && hisParamsData.MPE == 0.0 && hisParamsData.MPC == 0 && hisParamsData.KMTT == 0 ){
-                try{
+            if (hisParamsData.IMU_Z == 0 && hisParamsData.KP == 0 && hisParamsData.KD == 0 && hisParamsData.KI == 0 && hisParamsData.LB == 0 && hisParamsData.LA == 0 && hisParamsData.MPE == 0.0 && hisParamsData.MPC == 0 && hisParamsData.KMTT == 0)
+            {
+                try
+                {
 
                     umsSerialMethodsPtr->sendMessageToGetParamData();
                     RCLCPP_INFO(this->get_logger(), "等待参数初始化....");
-                }catch (const std::exception &e){
+                }
+                catch (const std::exception &e)
+                {
                     RCLCPP_ERROR(this->get_logger(), "Failed to init parameter: %s", e.what());
                 }
             }
-            if(!currentFictionData->paramsData.sysStatusFrame){
-                if(hisParamsData != currentFictionData->paramsData){
+            if (!currentFictionData->paramsData.sysStatusFrame)
+            {
+                if (hisParamsData != currentFictionData->paramsData)
+                {
                     hisParamsData = currentFictionData->paramsData;
                     publishParams(hisParamsData);
                 }
             }
-            //发布系统状态
-            if(currentFictionData->paramsData.sysStatusFrame){
+            // 发布系统状态
+            if (currentFictionData->paramsData.sysStatusFrame)
+            {
                 auto sysStatus = std_msgs::msg::Int8();
-                sysStatus.data =  static_cast<int>(currentFictionData->paramsData.sysStatusData);
-                //APT尝试恢复
+                sysStatus.data = static_cast<int>(currentFictionData->paramsData.sysStatusData);
+                // APT尝试恢复
 
-                if(currentFictionData->paramsData.sysStatusData == SysStatus::SYS_EMG_APT){
+                if (currentFictionData->paramsData.sysStatusData == SysStatus::SYS_EMG_APT)
+                {
                     RCLCPP_ERROR(this->get_logger(), "下位APT错误,尝试恢复");
                     umsSerialMethodsPtr->refuseController();
                 }
                 sysStatus_publisher_->publish(sysStatus);
             }
-
 
             // 发布温度
             auto temperature = std_msgs::msg::Float32();
@@ -388,7 +418,8 @@ private:
         twistA->linear_y = msg->linear.y;
         umsSerialMethodsPtr->sendTwistData(twistA);
     }
-    void paramWriteByYaml(){
+    void paramWriteByYaml()
+    {
         float KP, MPC, KD, LB, MPE, IMU_Z, LA, KI;
         int KMTT;
         std::string readOrWrite;
@@ -404,30 +435,32 @@ private:
         this->get_parameter("IMU_Z", IMU_Z);
         this->get_parameter("LC_read_write", readOrWrite);
 
-
-        if(readOrWrite == "read"){
+        if (readOrWrite == "read")
+        {
             RCLCPP_INFO(this->get_logger(), "read");
-            RCLCPP_INFO(this->get_logger(), "KP：%0.2f",KP);
-            RCLCPP_INFO(this->get_logger(), "KI：%0.2f",KI);
-            RCLCPP_INFO(this->get_logger(), "KD：%0.2f",KD);
-            RCLCPP_INFO(this->get_logger(), "MPE：%0.2f",MPE);
-            RCLCPP_INFO(this->get_logger(), "MPC：%0.2f",MPC);
-            RCLCPP_INFO(this->get_logger(), "KMTT：%d",KMTT);
-            RCLCPP_INFO(this->get_logger(), "LB：%0.2f",LB);
-            RCLCPP_INFO(this->get_logger(), "LA：%0.2f",LA);
-            RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f",IMU_Z);
+            RCLCPP_INFO(this->get_logger(), "KP：%0.2f", KP);
+            RCLCPP_INFO(this->get_logger(), "KI：%0.2f", KI);
+            RCLCPP_INFO(this->get_logger(), "KD：%0.2f", KD);
+            RCLCPP_INFO(this->get_logger(), "MPE：%0.2f", MPE);
+            RCLCPP_INFO(this->get_logger(), "MPC：%0.2f", MPC);
+            RCLCPP_INFO(this->get_logger(), "KMTT：%d", KMTT);
+            RCLCPP_INFO(this->get_logger(), "LB：%0.2f", LB);
+            RCLCPP_INFO(this->get_logger(), "LA：%0.2f", LA);
+            RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f", IMU_Z);
             umsSerialMethodsPtr->sendMessageToGetParamData();
-        } else if(readOrWrite == "write"){
+        }
+        else if (readOrWrite == "write")
+        {
             RCLCPP_INFO(this->get_logger(), "write");
-            RCLCPP_INFO(this->get_logger(), "KP：%0.2f",KP);
-            RCLCPP_INFO(this->get_logger(), "KI：%0.2f",KI);
-            RCLCPP_INFO(this->get_logger(), "KD：%0.2f",KD);
-            RCLCPP_INFO(this->get_logger(), "MPE：%0.2f",MPE);
-            RCLCPP_INFO(this->get_logger(), "MPC：%0.2f",MPC);
-            RCLCPP_INFO(this->get_logger(), "KMTT：%d",KMTT);
-            RCLCPP_INFO(this->get_logger(), "LB：%0.2f",LB);
-            RCLCPP_INFO(this->get_logger(), "LA：%0.2f",LA);
-            RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f",IMU_Z);
+            RCLCPP_INFO(this->get_logger(), "KP：%0.2f", KP);
+            RCLCPP_INFO(this->get_logger(), "KI：%0.2f", KI);
+            RCLCPP_INFO(this->get_logger(), "KD：%0.2f", KD);
+            RCLCPP_INFO(this->get_logger(), "MPE：%0.2f", MPE);
+            RCLCPP_INFO(this->get_logger(), "MPC：%0.2f", MPC);
+            RCLCPP_INFO(this->get_logger(), "KMTT：%d", KMTT);
+            RCLCPP_INFO(this->get_logger(), "LB：%0.2f", LB);
+            RCLCPP_INFO(this->get_logger(), "LA：%0.2f", LA);
+            RCLCPP_INFO(this->get_logger(), "IMU_Z：%0.2f", IMU_Z);
 
             ParamsData paramsData;
 
@@ -438,6 +471,8 @@ private:
             paramsData.KMTT = KMTT;
             paramsData.MPC = MPC;
             paramsData.IMU_Z = IMU_Z;
+            paramsData.LB = LB;
+            paramsData.LA = LA;
 
             umsSerialMethodsPtr->setParamsData(paramsData);
             umsSerialMethodsPtr->sendEditParamsData();
@@ -457,8 +492,10 @@ private:
         battery_publisher_->publish(message);
     }
 
-    void twistIdle(){
-        if(this->now().nanoseconds() - idle_time_->nanoseconds() > 100000000){
+    void twistIdle()
+    {
+        if (this->now().nanoseconds() - idle_time_->nanoseconds() > 100000000)
+        {
             auto twistA = std::make_shared<TwistCustom>();
             twistA->angular_z = 0;
             twistA->linear_x = 0;
@@ -481,22 +518,19 @@ private:
 
     std::shared_ptr<UmsSerialMethods> umsSerialMethodsPtr = nullptr;
     BatteryMonitor batteryMonitor = BatteryMonitor(12.6, 10.0);
-    rclcpp::TimerBase::SharedPtr timer_; // 定时器
+    rclcpp::TimerBase::SharedPtr timer_;     // 定时器
     rclcpp::TimerBase::SharedPtr imu_timer_; // IMU定时器
 
     std::shared_ptr<rclcpp::Time> idle_time_ = nullptr;
     rclcpp::TimerBase::SharedPtr idle_timer_; // 定时器
     std::shared_ptr<tf2_ros::TransformBroadcaster> tfBroadcaster_odom_ = nullptr;
-    bool  odomTfEnabled_ = true;
-
+    bool odomTfEnabled_ = true;
 
     std::shared_ptr<rclcpp::Time> last_time_ = nullptr;
     ParamsData hisParamsData{};
     double x_;
     double y_;
     double theta_;
-
-
 };
 
 int main(int argc, char *argv[])
