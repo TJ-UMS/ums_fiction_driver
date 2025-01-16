@@ -38,9 +38,22 @@ public:
     void refuseController();
     UmsSerialMethods();
     UmsSerialMethods(const std::string &portName, int baudRate, bool isDebug, int queueSize,AgreementVersion agreementVersion);
+	void stop() {
+        stopFlag = true;
+        cleanup();
+    }
 
+    // 添加状态查询方法
+    bool isRunning() const {
+        return !stopFlag;
+    }
 
+    // 修改析构函数
+    ~UmsSerialMethods() {
+        stop();
+    }
 private:
+    void cleanup();
     bool checkDataLength(uint8_t signLength, size_t size);
     bool checkSignValue(uint8_t sign);
     int Rfid(std::vector<uint8_t> &byteVector);

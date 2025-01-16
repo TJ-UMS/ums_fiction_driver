@@ -26,10 +26,14 @@ public:
     int baudrate;
     bool imuEnable = true;
     bool odomEnable = true;
+    ~UMSFictionROS2()
+    {
+        cleanup();
+    }
 
     UMSFictionROS2() : Node("ums_fiction_driver_node")
     {
-
+        setupSignalHandler();
         this->declare_parameter<int>("con_baudrate", 921600);
         this->declare_parameter<std::string>("con_port", "/dev/ttyUSB0");
         this->get_parameter<std::string>("con_port", port);            // 端口号
@@ -91,6 +95,36 @@ public:
     }
 
 private:
+    // 添加清理方法
+    void cleanup()
+    {
+        if (umsSerialMethodsPtr)
+        {
+            umsSerialMethodsPtr->stop();  // 使用之前在UmsSerialMethods中添加的stop方法
+        }
+
+        // 停止所有定时器
+        if (timer_) timer_->cancel();
+        if (imu_timer_) imu_timer_->cancel();
+        if (idle_timer_) idle_timer_->cancel();
+
+        // 清理其他资源
+        currentSerial.reset();
+        currentFictionData.reset();
+        tfBroadcaster_odom_.reset();
+    }
+
+    void setupSignalHandler()
+    {
+        auto handle_sigint = [this](int /*signal*/) {
+            RCLCPP_INFO(this->get_logger(), "Received shutdown signal, cleaning up...");
+            cleanup();
+            rclcpp::shutdown();
+        };
+
+        signal(SIGINT, handle_sigint);
+        signal(SIGTERM, handle_sigint);
+    }
     void imuTimerCallback()
     {
         if (imuEnable)
@@ -536,7 +570,21 @@ private:
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<UMSFictionROS2>());
+
+    auto node = std::make_shared<UMSFictionROS2>();
+
+    // 使用 MultiThreadedExecutor 以更好地处理信号
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(node);
+
+    try {
+        executor.spin();
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(node->get_logger(), "Error during execution: %s", e.what());
+    }
+
+    // 确保清理
+    node->cleanup();
     rclcpp::shutdown();
     return 0;
 }
