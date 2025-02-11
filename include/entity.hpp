@@ -52,9 +52,9 @@ struct ParamsData
 struct OdomInfo
 {
     /* data */
-    double delta_x;
-    double delta_y;
-    double delta_th;
+    double vx;
+    double vy;
+    double vth;
 };
 
 struct PowerInfo{

@@ -15,6 +15,7 @@
 #include "tf2/LinearMath/Quaternion.h"
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <angles/angles.h>
 
 class UMSFictionROS2 : public rclcpp::Node
 {
@@ -33,7 +34,7 @@ public:
 
     UMSFictionROS2() : Node("ums_fiction_driver_node")
     {
-        setupSignalHandler();
+        // setupSignalHandler();
         this->declare_parameter<int>("con_baudrate", 921600);
         this->declare_parameter<std::string>("con_port", "/dev/ttyUSB0");
         this->get_parameter<std::string>("con_port", port);            // 端口号
@@ -122,8 +123,8 @@ private:
             rclcpp::shutdown();
         };
 
-        signal(SIGINT, handle_sigint);
-        signal(SIGTERM, handle_sigint);
+        // signal(SIGINT, handle_sigint);
+        // signal(SIGTERM, handle_sigint);
     }
     void imuTimerCallback()
     {
@@ -261,74 +262,108 @@ private:
         imu_publisher_->publish(message);
     }
 
-    void OdometerDataPublish(OdomInfo data)
+   void OdometerDataPublish(OdomInfo data)
+{
+    if (last_time_ == nullptr)
     {
-        if (last_time_ == nullptr)
-        {
-
-            last_time_ = std::make_shared<rclcpp::Time>(this->now());
-        }
-
-        // 获取时间
-        rclcpp::Time current_time_ = this->now();
-
-        // 计算时间间隔
-        double dt = (current_time_ - *last_time_).seconds();
-        // 根据底盘速度计算机器人位姿
-        double vx = data.delta_x;
-        double vy = data.delta_y;
-        double vth = data.delta_th;
-
-        double delta_x = (vx * cos(theta_) - vy * sin(theta_)) * dt;
-        double delta_y = (vx * sin(theta_) + vy * cos(theta_)) * dt;
-        double delta_th = vth * dt;
-
-        x_ += delta_x;
-        y_ += delta_y;
-        theta_ += delta_th;
-
-        tf2::Quaternion quat;
-        quat.setRPY(0, 0, theta_);
-
-        if (odomTfEnabled_)
-        {
-            if (tfBroadcaster_odom_ == nullptr)
-            {
-                tfBroadcaster_odom_ = std::make_shared<tf2_ros::TransformBroadcaster>(this->shared_from_this());
-            }
-            // 发布tf坐标变换
-            geometry_msgs::msg::TransformStamped odom_trans;
-            odom_trans.header.stamp = current_time_;
-            odom_trans.header.frame_id = "odom";
-            odom_trans.child_frame_id = "base_link";
-            odom_trans.transform.translation.x = x_;
-            odom_trans.transform.translation.y = y_;
-            odom_trans.transform.translation.z = 0.0;
-            odom_trans.transform.rotation.x = quat.x();
-            odom_trans.transform.rotation.y = quat.y();
-            odom_trans.transform.rotation.z = quat.z();
-            odom_trans.transform.rotation.w = quat.w();
-            tfBroadcaster_odom_->sendTransform(odom_trans);
-        }
-
-        // 发布里程计消息
-        nav_msgs::msg::Odometry odom;
-        odom.header.stamp = current_time_;
-        odom.header.frame_id = "odom";
-        odom.child_frame_id = "base_link";
-        odom.pose.pose.position.x = x_;
-        odom.pose.pose.position.y = y_;
-        odom.pose.pose.position.z = 0.0;
-        odom.pose.pose.orientation.y = quat.y();
-        odom.pose.pose.orientation.x = quat.x();
-        odom.pose.pose.orientation.z = quat.z();
-        odom.pose.pose.orientation.w = quat.w();
-        odom.twist.twist.linear.x = vx;
-        odom.twist.twist.linear.y = vy;
-        odom.twist.twist.angular.z = vth;
-        odom_publisher_->publish(odom);
-        last_time_ = std::make_shared<rclcpp::Time>(current_time_);
+        last_time_ = std::make_shared<rclcpp::Time>(this->now());
+        return;  // 第一次调用直接返回，避免dt为0
     }
+
+    // 获取时间
+    rclcpp::Time current_time_ = this->now();
+    // 计算时间间隔
+    double dt = (current_time_ - *last_time_).seconds();
+
+    // 时间间隔检查
+    if (dt <= 0 || dt > 1.0) {
+        RCLCPP_WARN(this->get_logger(), "Invalid time difference: %f", dt);
+        return;
+    }
+
+    // 速度数据检查
+    if (std::isnan(data.vx) || std::isnan(data.vy) || std::isnan(data.vth)) {
+        RCLCPP_ERROR(this->get_logger(), "Invalid velocity data received");
+        return;
+    }
+
+    // 使用速度计算位移增量
+    double delta_x = (data.vx * cos(theta_) - data.vy * sin(theta_)) * dt;
+    double delta_y = (data.vx * sin(theta_) + data.vy * cos(theta_)) * dt;
+    double delta_th = data.vth * dt;
+
+    // 更新位姿
+    x_ += delta_x;
+    y_ += delta_y;
+    theta_ += delta_th;
+
+    // 将角度归一化到[-π, π]
+    theta_ = angles::normalize_angle(theta_);
+
+    // 计算四元数
+    tf2::Quaternion quat;
+    quat.setRPY(0, 0, theta_);
+
+    if (odomTfEnabled_)
+    {
+        if (tfBroadcaster_odom_ == nullptr)
+        {
+            tfBroadcaster_odom_ = std::make_shared<tf2_ros::TransformBroadcaster>(this->shared_from_this());
+        }
+        // 发布tf坐标变换
+        geometry_msgs::msg::TransformStamped odom_trans;
+        odom_trans.header.stamp = current_time_;
+        odom_trans.header.frame_id = "odom";
+        odom_trans.child_frame_id = "base_link";
+        odom_trans.transform.translation.x = x_;
+        odom_trans.transform.translation.y = y_;
+        odom_trans.transform.translation.z = 0.0;
+        odom_trans.transform.rotation.x = quat.x();
+        odom_trans.transform.rotation.y = quat.y();
+        odom_trans.transform.rotation.z = quat.z();
+        odom_trans.transform.rotation.w = quat.w();
+        tfBroadcaster_odom_->sendTransform(odom_trans);
+    }
+
+    // 发布里程计消息
+    nav_msgs::msg::Odometry odom;
+    odom.header.stamp = current_time_;
+    odom.header.frame_id = "odom";
+    odom.child_frame_id = "base_link";
+
+    // 位置
+    odom.pose.pose.position.x = x_;
+    odom.pose.pose.position.y = y_;
+    odom.pose.pose.position.z = 0.0;
+
+    // 姿态
+    odom.pose.pose.orientation.x = quat.x();
+    odom.pose.pose.orientation.y = quat.y();
+    odom.pose.pose.orientation.z = quat.z();
+    odom.pose.pose.orientation.w = quat.w();
+
+    // 速度
+    odom.twist.twist.linear.x = data.vx;
+    odom.twist.twist.linear.y = data.vy;
+    odom.twist.twist.angular.z = data.vth;
+
+    // 添加协方差矩阵（根据实际情况调整）
+    for(size_t i = 0; i < 36; ++i) {
+        odom.pose.covariance[i] = 0.0;
+        odom.twist.covariance[i] = 0.0;
+    }
+    // 设置对角线元素
+    odom.pose.covariance[0] = 0.01;  // x位置方差
+    odom.pose.covariance[7] = 0.01;  // y位置方差
+    odom.pose.covariance[35] = 0.01; // theta方差
+
+    odom.twist.covariance[0] = 0.01;  // x速度方差
+    odom.twist.covariance[7] = 0.01;  // y速度方差
+    odom.twist.covariance[35] = 0.01; // 角速度方差
+
+    odom_publisher_->publish(odom);
+    last_time_ = std::make_shared<rclcpp::Time>(current_time_);
+}
 
     void publishParams(const ParamsData &data)
     {
@@ -584,7 +619,7 @@ int main(int argc, char *argv[])
     }
 
     // 确保清理
-    node->cleanup();
+    // node->cleanup();
     rclcpp::shutdown();
     return 0;
 }
