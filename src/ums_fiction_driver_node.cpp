@@ -59,14 +59,24 @@ public:
         this->get_parameter("imu", imuEnable);
         this->get_parameter("odom_tf_enable", odomTfEnabled_);
         // 初始化发布器
-        imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu", 10);
-        odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
+        if (imuEnable)
+        {
+            imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("imu", 10);
+            imu_timer_ = this->create_wall_timer(
+                std::chrono::milliseconds(4), // 1000ms / 200Hz = 约5ms
+                std::bind(&UMSFictionROS2::imuTimerCallback, this));
+        }
+        if (odomEnable)
+        {
+            odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
+        }
         ultrasonic_publisher_ = this->create_publisher<std_msgs::msg::Float32>("ultrasonic", 10);
         temperature_publisher_ = this->create_publisher<std_msgs::msg::Float32>("temperature", 10);
         battery_publisher_ = this->create_publisher<sensor_msgs::msg::BatteryState>("battery_state", 10);
         rfid_publisher_ = this->create_publisher<std_msgs::msg::String>("rfid_data", 10);
         magnetic_publisher_ = this->create_publisher<std_msgs::msg::String>("magnetic_data", 10);
         sysStatus_publisher_ = this->create_publisher<std_msgs::msg::Int8>("sys_status", 10);
+        softwareStatus_publisher_ = this->create_publisher<std_msgs::msg::Int8>("software_status", 10);
 
         // 初始化订阅器
         cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
@@ -86,28 +96,61 @@ public:
         //                std::bind(&UMSFictionROS2::twistIdle,this)
         //        );
 
-        imu_timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(4), // 1000ms / 200Hz = 约5ms
-            std::bind(&UMSFictionROS2::imuTimerCallback, this));
-
         idle_time_ = std::make_shared<rclcpp::Time>(this->now());
+
+        wait_connect_timer_ = this->create_wall_timer(
+            std::chrono::milliseconds(1000), // 1000ms / 10Hz = 约100ms
+            std::bind(&UMSFictionROS2::waitConnect, this));
         paramWriteByYaml();
         umsSerialMethodsPtr->loopUmsFictionData(currentFictionData);
     }
 
 private:
+    void waitConnect()
+    {
+        if (umsSerialMethodsPtr)
+        {
+            if (nowStatus == 3)
+            {
+            }
+            else if (wait_connect_count_ > 200 && nowStatus != 3)
+            {
+                umsSerialMethodsPtr->stop();
+                umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>(port, baudrate, false, 40, AgreementVersion::V1);
+                currentSerial = umsSerialMethodsPtr->getSerial();
+                umsSerialMethodsPtr->loopUmsFictionData(currentFictionData);
+
+                nowStatus = 0;
+                waitConnect_count_ = 0;
+
+                /* code */
+            }
+            else if (nowStatus != 3 && wait_connect_count_ < 200)
+            {
+                wait_connect_count_++;
+
+                /* code */
+            }
+        }
+        auto sysStatus = std_msgs::msg::Int8();
+        sysStatus.data = nowStatus;
+        softwareStatus_publisher_->publish(sysStatus);
+    }
     // 添加清理方法
     void cleanup()
     {
         if (umsSerialMethodsPtr)
         {
-            umsSerialMethodsPtr->stop();  // 使用之前在UmsSerialMethods中添加的stop方法
+            umsSerialMethodsPtr->stop(); // 使用之前在UmsSerialMethods中添加的stop方法
         }
 
         // 停止所有定时器
-        if (timer_) timer_->cancel();
-        if (imu_timer_) imu_timer_->cancel();
-        if (idle_timer_) idle_timer_->cancel();
+        if (timer_)
+            timer_->cancel();
+        if (imu_timer_)
+            imu_timer_->cancel();
+        if (idle_timer_)
+            idle_timer_->cancel();
 
         // 清理其他资源
         currentSerial.reset();
@@ -117,7 +160,8 @@ private:
 
     void setupSignalHandler()
     {
-        auto handle_sigint = [this](int /*signal*/) {
+        auto handle_sigint = [this](int /*signal*/)
+        {
             RCLCPP_INFO(this->get_logger(), "Received shutdown signal, cleaning up...");
             cleanup();
             rclcpp::shutdown();
@@ -128,7 +172,7 @@ private:
     }
     void imuTimerCallback()
     {
-        if (imuEnable)
+        if (imuEnable && nowStatus == 3)
         {
             ImuDataPublish(currentFictionData->imuStructural); // 发布IMU
         }
@@ -262,108 +306,111 @@ private:
         imu_publisher_->publish(message);
     }
 
-   void OdometerDataPublish(OdomInfo data)
-{
-    if (last_time_ == nullptr)
+    void OdometerDataPublish(OdomInfo data)
     {
-        last_time_ = std::make_shared<rclcpp::Time>(this->now());
-        return;  // 第一次调用直接返回，避免dt为0
-    }
-
-    // 获取时间
-    rclcpp::Time current_time_ = this->now();
-    // 计算时间间隔
-    double dt = (current_time_ - *last_time_).seconds();
-
-    // 时间间隔检查
-    if (dt <= 0 || dt > 1.0) {
-        RCLCPP_WARN(this->get_logger(), "Invalid time difference: %f", dt);
-        return;
-    }
-
-    // 速度数据检查
-    if (std::isnan(data.vx) || std::isnan(data.vy) || std::isnan(data.vth)) {
-        RCLCPP_ERROR(this->get_logger(), "Invalid velocity data received");
-        return;
-    }
-
-    // 使用速度计算位移增量
-    double delta_x = (data.vx * cos(theta_) - data.vy * sin(theta_)) * dt;
-    double delta_y = (data.vx * sin(theta_) + data.vy * cos(theta_)) * dt;
-    double delta_th = data.vth * dt;
-
-    // 更新位姿
-    x_ += delta_x;
-    y_ += delta_y;
-    theta_ += delta_th;
-
-    // 将角度归一化到[-π, π]
-    theta_ = angles::normalize_angle(theta_);
-
-    // 计算四元数
-    tf2::Quaternion quat;
-    quat.setRPY(0, 0, theta_);
-
-    if (odomTfEnabled_)
-    {
-        if (tfBroadcaster_odom_ == nullptr)
+        if (last_time_ == nullptr)
         {
-            tfBroadcaster_odom_ = std::make_shared<tf2_ros::TransformBroadcaster>(this->shared_from_this());
+            last_time_ = std::make_shared<rclcpp::Time>(this->now());
+            return; // 第一次调用直接返回，避免dt为0
         }
-        // 发布tf坐标变换
-        geometry_msgs::msg::TransformStamped odom_trans;
-        odom_trans.header.stamp = current_time_;
-        odom_trans.header.frame_id = "odom";
-        odom_trans.child_frame_id = "base_link";
-        odom_trans.transform.translation.x = x_;
-        odom_trans.transform.translation.y = y_;
-        odom_trans.transform.translation.z = 0.0;
-        odom_trans.transform.rotation.x = quat.x();
-        odom_trans.transform.rotation.y = quat.y();
-        odom_trans.transform.rotation.z = quat.z();
-        odom_trans.transform.rotation.w = quat.w();
-        tfBroadcaster_odom_->sendTransform(odom_trans);
+
+        // 获取时间
+        rclcpp::Time current_time_ = this->now();
+        // 计算时间间隔
+        double dt = (current_time_ - *last_time_).seconds();
+
+        // 时间间隔检查
+        if (dt <= 0 || dt > 1.0)
+        {
+            RCLCPP_WARN(this->get_logger(), "Invalid time difference: %f", dt);
+            return;
+        }
+
+        // 速度数据检查
+        if (std::isnan(data.vx) || std::isnan(data.vy) || std::isnan(data.vth))
+        {
+            RCLCPP_ERROR(this->get_logger(), "Invalid velocity data received");
+            return;
+        }
+
+        // 使用速度计算位移增量
+        double delta_x = (data.vx * cos(theta_) - data.vy * sin(theta_)) * dt;
+        double delta_y = (data.vx * sin(theta_) + data.vy * cos(theta_)) * dt;
+        double delta_th = data.vth * dt;
+
+        // 更新位姿
+        x_ += delta_x;
+        y_ += delta_y;
+        theta_ += delta_th;
+
+        // 将角度归一化到[-π, π]
+        theta_ = angles::normalize_angle(theta_);
+
+        // 计算四元数
+        tf2::Quaternion quat;
+        quat.setRPY(0, 0, theta_);
+
+        if (odomTfEnabled_)
+        {
+            if (tfBroadcaster_odom_ == nullptr)
+            {
+                tfBroadcaster_odom_ = std::make_shared<tf2_ros::TransformBroadcaster>(this->shared_from_this());
+            }
+            // 发布tf坐标变换
+            geometry_msgs::msg::TransformStamped odom_trans;
+            odom_trans.header.stamp = current_time_;
+            odom_trans.header.frame_id = "odom";
+            odom_trans.child_frame_id = "base_link";
+            odom_trans.transform.translation.x = x_;
+            odom_trans.transform.translation.y = y_;
+            odom_trans.transform.translation.z = 0.0;
+            odom_trans.transform.rotation.x = quat.x();
+            odom_trans.transform.rotation.y = quat.y();
+            odom_trans.transform.rotation.z = quat.z();
+            odom_trans.transform.rotation.w = quat.w();
+            tfBroadcaster_odom_->sendTransform(odom_trans);
+        }
+
+        // 发布里程计消息
+        nav_msgs::msg::Odometry odom;
+        odom.header.stamp = current_time_;
+        odom.header.frame_id = "odom";
+        odom.child_frame_id = "base_link";
+
+        // 位置
+        odom.pose.pose.position.x = x_;
+        odom.pose.pose.position.y = y_;
+        odom.pose.pose.position.z = 0.0;
+
+        // 姿态
+        odom.pose.pose.orientation.x = quat.x();
+        odom.pose.pose.orientation.y = quat.y();
+        odom.pose.pose.orientation.z = quat.z();
+        odom.pose.pose.orientation.w = quat.w();
+
+        // 速度
+        odom.twist.twist.linear.x = data.vx;
+        odom.twist.twist.linear.y = data.vy;
+        odom.twist.twist.angular.z = data.vth;
+
+        // 添加协方差矩阵（根据实际情况调整）
+        for (size_t i = 0; i < 36; ++i)
+        {
+            odom.pose.covariance[i] = 0.0;
+            odom.twist.covariance[i] = 0.0;
+        }
+        // 设置对角线元素
+        odom.pose.covariance[0] = 0.01;  // x位置方差
+        odom.pose.covariance[7] = 0.01;  // y位置方差
+        odom.pose.covariance[35] = 0.01; // theta方差
+
+        odom.twist.covariance[0] = 0.01;  // x速度方差
+        odom.twist.covariance[7] = 0.01;  // y速度方差
+        odom.twist.covariance[35] = 0.01; // 角速度方差
+
+        odom_publisher_->publish(odom);
+        last_time_ = std::make_shared<rclcpp::Time>(current_time_);
     }
-
-    // 发布里程计消息
-    nav_msgs::msg::Odometry odom;
-    odom.header.stamp = current_time_;
-    odom.header.frame_id = "odom";
-    odom.child_frame_id = "base_link";
-
-    // 位置
-    odom.pose.pose.position.x = x_;
-    odom.pose.pose.position.y = y_;
-    odom.pose.pose.position.z = 0.0;
-
-    // 姿态
-    odom.pose.pose.orientation.x = quat.x();
-    odom.pose.pose.orientation.y = quat.y();
-    odom.pose.pose.orientation.z = quat.z();
-    odom.pose.pose.orientation.w = quat.w();
-
-    // 速度
-    odom.twist.twist.linear.x = data.vx;
-    odom.twist.twist.linear.y = data.vy;
-    odom.twist.twist.angular.z = data.vth;
-
-    // 添加协方差矩阵（根据实际情况调整）
-    for(size_t i = 0; i < 36; ++i) {
-        odom.pose.covariance[i] = 0.0;
-        odom.twist.covariance[i] = 0.0;
-    }
-    // 设置对角线元素
-    odom.pose.covariance[0] = 0.01;  // x位置方差
-    odom.pose.covariance[7] = 0.01;  // y位置方差
-    odom.pose.covariance[35] = 0.01; // theta方差
-
-    odom.twist.covariance[0] = 0.01;  // x速度方差
-    odom.twist.covariance[7] = 0.01;  // y速度方差
-    odom.twist.covariance[35] = 0.01; // 角速度方差
-
-    odom_publisher_->publish(odom);
-    last_time_ = std::make_shared<rclcpp::Time>(current_time_);
-}
 
     void publishParams(const ParamsData &data)
     {
@@ -411,27 +458,35 @@ private:
     {
         if (currentSerial != nullptr)
         {
-            // 发布里程计
-            if (odomEnable)
-                OdometerDataPublish(currentFictionData->odomData);
-            // 发布IMU
+            if (nowStatus == 3)
+            {
+                // 发布里程计
+                if (odomEnable)
+                    OdometerDataPublish(currentFictionData->odomData);
+                // 发布IMU
 
-            // 发布 RFID
-            auto r = std_msgs::msg::String();
-            r.data = currentFictionData->rfidData;
-            rfid_publisher_->publish(r);
-            // 发布磁条
-            auto m = std_msgs::msg::String();
-            m.data = currentFictionData->magneticData;
-            magnetic_publisher_->publish(m);
+                // 发布 RFID
+                auto r = std_msgs::msg::String();
+                r.data = currentFictionData->rfidData;
+                rfid_publisher_->publish(r);
+                // 发布磁条
+                auto m = std_msgs::msg::String();
+                m.data = currentFictionData->magneticData;
+                magnetic_publisher_->publish(m);
 
-            // 发布超声
-            auto u = std_msgs::msg::Float32();
-            u.data = currentFictionData->ultrasonic;
-            ultrasonic_publisher_->publish(u);
+                // 发布超声
+                auto u = std_msgs::msg::Float32();
+                u.data = currentFictionData->ultrasonic;
+                ultrasonic_publisher_->publish(u);
 
-            // 发布电池
-            batteryPublish(currentFictionData->powerData);
+                // 发布电池
+                batteryPublish(currentFictionData->powerData);
+
+                // 发布温度
+                auto temperature = std_msgs::msg::Float32();
+                temperature.data = currentFictionData->temperature;
+                temperature_publisher_->publish(temperature);
+            }
 
             // 发布参数
             if (hisParamsData.IMU_Z == 0 && hisParamsData.KP == 0 && hisParamsData.KD == 0 && hisParamsData.KI == 0 && hisParamsData.LB == 0 && hisParamsData.LA == 0 && hisParamsData.MPE == 0.0 && hisParamsData.MPC == 0 && hisParamsData.KMTT == 0)
@@ -441,12 +496,19 @@ private:
 
                     umsSerialMethodsPtr->sendMessageToGetParamData();
                     RCLCPP_INFO(this->get_logger(), "等待参数初始化....");
+                    nowStatus = 2;
                 }
                 catch (const std::exception &e)
                 {
                     RCLCPP_ERROR(this->get_logger(), "Failed to init parameter: %s", e.what());
                 }
             }
+            else if (nowStatus == 1 && currentFictionData->paramsData.sysStatusFrame)
+            {
+                nowStatus == 3;
+                /* code */
+            }
+
             if (!currentFictionData->paramsData.sysStatusFrame)
             {
                 if (hisParamsData != currentFictionData->paramsData)
@@ -469,11 +531,6 @@ private:
                 }
                 sysStatus_publisher_->publish(sysStatus);
             }
-
-            // 发布温度
-            auto temperature = std_msgs::msg::Float32();
-            temperature.data = currentFictionData->temperature;
-            temperature_publisher_->publish(temperature);
         }
     }
 
@@ -585,10 +642,13 @@ private:
 
     rclcpp::Publisher<std_msgs::msg::Int8>::SharedPtr sysStatus_publisher_;
 
+    rclcpp::Publisher<std_msgs::msg::Int8>::SharedPtr softwareStatus_publisher_;
+
     std::shared_ptr<UmsSerialMethods> umsSerialMethodsPtr = nullptr;
     BatteryMonitor batteryMonitor = BatteryMonitor(12.6, 10.0);
     rclcpp::TimerBase::SharedPtr timer_;     // 定时器
     rclcpp::TimerBase::SharedPtr imu_timer_; // IMU定时器
+    rclcpp::TimerBase::SharedPtr wait_connect_timer_;
 
     std::shared_ptr<rclcpp::Time> idle_time_ = nullptr;
     rclcpp::TimerBase::SharedPtr idle_timer_; // 定时器
@@ -600,6 +660,9 @@ private:
     double x_;
     double y_;
     double theta_;
+
+    int nowStatus = 0;
+    int wait_connect_count_ = 0;
 };
 
 int main(int argc, char *argv[])
@@ -612,9 +675,12 @@ int main(int argc, char *argv[])
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(node);
 
-    try {
+    try
+    {
         executor.spin();
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         RCLCPP_ERROR(node->get_logger(), "Error during execution: %s", e.what());
     }
 
