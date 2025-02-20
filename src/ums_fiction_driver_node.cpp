@@ -16,6 +16,11 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <angles/angles.h>
+#include <libudev.h>
+#include <unistd.h> // for sleep()
+#include <fcntl.h>  // for open()
+#include <errno.h>  // for errno
+#include <cstring>  // for strerror()
 
 class UMSFictionROS2 : public rclcpp::Node
 {
@@ -106,6 +111,55 @@ public:
     }
 
 private:
+    void plugUSB()
+    {
+         // Todo: 按照TTYUSB编号找到USB设备并断开后等待2S再挂载
+            struct udev *udev;
+            struct udev_device *dev;
+            const char *devnode = nullptr;
+
+            // 创建udev对象
+            udev = udev_new();
+            if (!udev) {
+                RCLCPP_ERROR(this->get_logger(), "无法创建udev对象");
+                return;
+            }
+
+            // 查找设备
+            dev = udev_device_new_from_subsystem_sysname(udev, "tty", port.c_str());
+            if (dev) {
+                devnode = udev_device_get_devnode(dev);
+                RCLCPP_INFO(this->get_logger(), "找到设备: %s", devnode);
+
+                // 关闭设备（模拟断开连接）
+                int fd = open(devnode, O_RDWR | O_NOCTTY);
+                if (fd >= 0) {
+                    close(fd);
+                    RCLCPP_INFO(this->get_logger(), "设备已关闭: %s", devnode);
+                } else {
+                    RCLCPP_ERROR(this->get_logger(), "无法关闭设备: %s (%s)", devnode, strerror(errno));
+                }
+
+                // 释放设备对象
+                udev_device_unref(dev);
+            } else {
+                RCLCPP_ERROR(this->get_logger(), "未找到设备: %s", port.c_str());
+            }
+
+            // 等待2秒
+            sleep(2);
+
+            // 尝试重新打开设备
+            int fd = open(port.c_str(), O_RDWR | O_NOCTTY);
+            if (fd >= 0) {
+                RCLCPP_INFO(this->get_logger(), "设备已重新打开: %s", port.c_str());
+                close(fd);
+            } else {
+                RCLCPP_ERROR(this->get_logger(), "无法重新打开设备: %s (%s)", port.c_str(), strerror(errno));
+            }
+            // 释放udev对象
+            udev_unref(udev);
+    }
     void waitConnect()
     {
         if (umsSerialMethodsPtr)
@@ -113,21 +167,27 @@ private:
             if (nowStatus == 3)
             {
             }
-            else if (wait_connect_count_ > 200 && nowStatus != 3)
+            else if (wait_connect_count_ >= 400 && nowStatus != 3)
             {
+
+                RCLCPP_INFO(this->get_logger(), "尝试重新连接....");
+
                 umsSerialMethodsPtr->stop();
+                //Todo :按照TTYUSB编号找到USB设备并断开后等待2S再挂载 
+                //plugUSB();
                 umsSerialMethodsPtr = std::make_shared<UmsSerialMethods>(port, baudrate, false, 40, AgreementVersion::V1);
                 currentSerial = umsSerialMethodsPtr->getSerial();
                 umsSerialMethodsPtr->loopUmsFictionData(currentFictionData);
 
                 nowStatus = 0;
-                waitConnect_count_ = 0;
+                wait_connect_count_ = 0;
 
                 /* code */
             }
-            else if (nowStatus != 3 && wait_connect_count_ < 200)
+            else if (nowStatus != 3 && wait_connect_count_ < 400)
             {
                 wait_connect_count_++;
+                RCLCPP_INFO(this->get_logger(), "等待计数.... <400");
 
                 /* code */
             }
@@ -503,9 +563,9 @@ private:
                     RCLCPP_ERROR(this->get_logger(), "Failed to init parameter: %s", e.what());
                 }
             }
-            else if (nowStatus == 1 && currentFictionData->paramsData.sysStatusFrame)
+            else if (nowStatus == 2  && currentFictionData->paramsData.sysStatusFrame)
             {
-                nowStatus == 3;
+                nowStatus = 3;
                 /* code */
             }
 
@@ -514,6 +574,7 @@ private:
                 if (hisParamsData != currentFictionData->paramsData)
                 {
                     hisParamsData = currentFictionData->paramsData;
+                    nowStatus = 3;
                     publishParams(hisParamsData);
                 }
             }

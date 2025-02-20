@@ -15,6 +15,11 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(angles REQUIRED)
+
+# 使用 pkg-config 查找 libudev
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(UDEV REQUIRED libudev)  # 查找 libudev
 
 
 # uncomment the following section in order to fill in
@@ -62,12 +67,15 @@ add_executable(ums_fiction_driver_node src/ums_fiction_driver_node.cpp)
 ament_target_dependencies(ums_fiction_driver_node rclcpp geometry_msgs sensor_msgs nav_msgs tf2 tf2_ros tf2_geometry_msgs angles)
 target_include_directories(ums_fiction_driver_node PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>)
+        $<INSTALL_INTERFACE:include>
+        ${UDEV_INCLUDE_DIRS}  # 添加 libudev 的头文件路径
+        )
 # 添加链接库
 target_link_libraries(ums_fiction_driver_node
         ${UMS_SDK}
         ${SERIAL}
         ${LOG4}
+        ${UDEV_LIBRARIES}  # 链接 libudev 库
 )
 install(TARGETS ums_fiction_driver_node
         DESTINATION lib/${PROJECT_NAME})
